@@ -14,5 +14,5 @@ data/audit.json
 # build cache
 tsconfig.tsbuildinfo
 
-# uploads (keep if you want to version assets)
+# uploads
 uploads/

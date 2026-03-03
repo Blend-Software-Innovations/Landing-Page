@@ -1,0 +1,10 @@
+﻿{
+  "seoImage": "/gallery/gallery-main.png",
+  "signatureImage": "/gallery/gallery-main.png",
+  "gallery": [
+    { "url": "/gallery/gallery-main.png", "caption": "Signature pen" },
+    { "url": "/gallery/gallery-blue-pen.png", "caption": "Blue set" },
+    { "url": "/gallery/gallery-pink-set.png", "caption": "Pink set" },
+    { "url": "/gallery/gallery-rose-set.png", "caption": "Rose set" }
+  ]
+}
