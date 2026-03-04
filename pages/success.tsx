@@ -9,6 +9,8 @@ export default function Success() {
   useEffect(() => {
     if (!router.isReady) return;
     const sessionId = String(router.query.session_id || "");
+    const reservationId = String(router.query.reservation_id || "");
+    const reservationIds = String(router.query.reservation_ids || "");
     if (!sessionId) {
       setStatus("Order confirmed. SMS will be sent shortly.");
       return;
@@ -23,6 +25,36 @@ export default function Success() {
         setStatus("Order confirmed. SMS sent successfully.");
       })
       .catch(() => setStatus("Order confirmed. SMS may arrive shortly."));
+
+    if (reservationId || reservationIds) {
+      const ids = reservationIds ? reservationIds.split(",").filter(Boolean) : reservationId ? [reservationId] : [];
+      fetch("/api/inventory/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservationId, reservationIds: ids })
+      }).catch(() => undefined);
+    }
+
+    if (typeof window !== "undefined") {
+      const last = window.localStorage.getItem("last_checkout");
+      if (last) {
+        try {
+          const parsed = JSON.parse(last) as { value?: number; items?: any[] };
+          if (window.localStorage.getItem("marketing_consent") === "granted") {
+            const gtag = (window as any).gtag;
+            if (typeof gtag === "function") {
+              gtag("event", "purchase", { currency: "BDT", value: parsed.value || 0 });
+            }
+            const fbq = (window as any).fbq;
+            if (typeof fbq === "function") {
+              fbq("track", "Purchase", { currency: "BDT", value: parsed.value || 0 });
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
   }, [router.isReady, router.query.session_id]);
 
   return (

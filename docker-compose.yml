@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: pen_db
+    environment:
+      POSTGRES_USER: pen
+      POSTGRES_PASSWORD: penpass
+      POSTGRES_DB: pen_landing
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: pen_app
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://pen:penpass@db:5432/pen_landing
+      AUTH_JWT_SECRET: change_me
+      AUTH_REFRESH_SECRET: change_me
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+volumes:
+  db_data:

@@ -10,6 +10,9 @@ node_modules/
 # logs/data
 data/analytics.jsonl
 data/audit.json
+data/*.jsonl
+data/users.json
+data/test-auth/
 
 # build cache
 tsconfig.tsbuildinfo

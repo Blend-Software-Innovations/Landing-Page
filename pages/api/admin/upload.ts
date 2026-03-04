@@ -3,6 +3,9 @@ import formidable from "formidable";
 import os from "os";
 import { canRead, resolveRole } from "../../../lib/adminAuth";
 import { isRateLimited } from "../../../lib/rateLimit";
+import { adminRateLimitPerMin } from "../../../lib/env";
+import { requireCsrf } from "../../../lib/csrf";
+import { requireDb } from "../../../lib/db";
 import { uploadImage } from "../../../lib/uploads";
 
 export const config = {
@@ -10,9 +13,9 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const role = resolveRole(req);
+  const role = await resolveRole(req);
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`admin-upload:${ip}`, 20, 60_000)) {
+  if (isRateLimited(`admin-upload:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many uploads. Please try again shortly." });
   }
 
@@ -24,6 +27,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
+  if (!requireDb(res)) return;
+  if (!requireCsrf(req, res)) return;
 
   const form = formidable({
     multiples: false,
@@ -50,3 +55,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   });
 }
+

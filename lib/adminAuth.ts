@@ -1,46 +1,50 @@
 ﻿import type { NextApiRequest } from "next";
+import { jwtVerify } from "jose";
+import { env } from "./env";
+import { findUserById } from "./auth";
 
-export type AdminRole = "admin" | "editor" | "none";
+export type AdminRole = "owner" | "admin" | "staff" | "none";
 
-type Creds = { user: string; pass: string } | null;
+const encoder = new TextEncoder();
+const accessSecret = encoder.encode(env.AUTH_JWT_SECRET);
 
-function parseBasicAuth(req: NextApiRequest): Creds {
-  const auth = req.headers.authorization || "";
-  if (!auth.startsWith("Basic ")) return null;
-  const decoded = Buffer.from(auth.replace("Basic ", ""), "base64").toString("utf8");
-  const [user, pass] = decoded.split(":");
-  if (!user || !pass) return null;
-  return { user, pass };
+function parseCookie(req: NextApiRequest, name: string) {
+  const cookie = req.headers.cookie || "";
+  const part = cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(`${name}=`));
+  if (!part) return null;
+  return decodeURIComponent(part.split("=")[1] || "");
 }
 
-export function resolveRole(req: NextApiRequest): AdminRole {
-  const adminUser = process.env.ADMIN_USER;
-  const adminPass = process.env.ADMIN_PASS;
-  const editorUser = process.env.EDITOR_USER;
-  const editorPass = process.env.EDITOR_PASS;
-  const adminToken = process.env.ADMIN_TOKEN;
-
-  if (adminToken) {
-    const header = req.headers["x-admin-token"];
-    if (header === adminToken) return "admin";
+export async function resolveRole(req: NextApiRequest): Promise<AdminRole> {
+  const token = parseCookie(req, "access_token");
+  if (!token) return "none";
+  try {
+    const { payload } = await jwtVerify(token, accessSecret);
+    const role = (payload.role as AdminRole) || "none";
+    return role;
+  } catch {
+    return "none";
   }
+}
 
-  const basic = parseBasicAuth(req);
-  if (basic && adminUser && adminPass && basic.user === adminUser && basic.pass === adminPass) {
-    return "admin";
+export async function resolveActor(req: NextApiRequest) {
+  const token = parseCookie(req, "access_token");
+  if (!token) return { actor: "unknown", role: "none" as AdminRole };
+  try {
+    const { payload } = await jwtVerify(token, accessSecret);
+    const role = (payload.role as AdminRole) || "none";
+    const sub = payload.sub as string | undefined;
+    const user = sub ? findUserById(sub) : null;
+    return { actor: user?.email || sub || "unknown", role };
+  } catch {
+    return { actor: "unknown", role: "none" as AdminRole };
   }
-
-  if (basic && editorUser && editorPass && basic.user === editorUser && basic.pass === editorPass) {
-    return "editor";
-  }
-
-  return "none";
 }
 
 export function canRead(role: AdminRole) {
-  return role === "admin" || role === "editor";
+  return role === "owner" || role === "admin" || role === "staff";
 }
 
 export function canWrite(role: AdminRole) {
-  return role === "admin";
+  return role === "owner" || role === "admin";
 }

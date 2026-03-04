@@ -3,16 +3,30 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import type { SiteConfig, Review } from "../lib/siteConfig";
+import { normalizeSections } from "../lib/siteConfig";
+import { materializeVariants } from "../lib/variants";
 import { applyTemplate, templates } from "../lib/templates";
 
 function getAuthHeaders() {
-  if (typeof window === "undefined") return {} as Record<string, string>;
-  const token = localStorage.getItem("admin_token") || "";
-  const basic = localStorage.getItem("admin_basic") || "";
-  const headers: Record<string, string> = {};
-  if (token) headers["x-admin-token"] = token;
-  if (basic) headers.Authorization = `Basic ${basic}`;
-  return headers;
+  if (typeof document === "undefined") return {} as Record<string, string>;
+  const match = document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("csrf_token="));
+  const token = match ? decodeURIComponent(match.split("=")[1] || "") : "";
+  return token ? ({ "x-csrf-token": token } as Record<string, string>) : ({} as Record<string, string>);
+}
+
+const ORDER_STATUS_FLOW: Record<string, string[]> = {
+  PENDING: ["CONFIRMED", "CANCELED"],
+  CONFIRMED: ["PACKED", "CANCELED"],
+  PACKED: ["SHIPPED", "CANCELED"],
+  SHIPPED: ["DELIVERED", "RETURNED"],
+  DELIVERED: ["RETURNED"],
+  CANCELED: [],
+  RETURNED: []
+};
+
+function getOrderStatusOptions(current: string) {
+  const next = ORDER_STATUS_FLOW[current] || [];
+  return [current, ...next];
 }
 
 function Section({ title, children, hint }: { title: string; hint?: string; children: ReactNode }) {
@@ -69,6 +83,8 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<{ total: number; last7Days: number; events: Record<string, number> } | null>(null);
   const [auditLog, setAuditLog] = useState<Array<{ id: string; createdAt: string; actor?: string; role?: string; data?: SiteConfig }>>([]);
   const [templateId, setTemplateId] = useState<string>(templates[0]?.id || "");
+  const [orders, setOrders] = useState<any[]>([]);
+  const [holds, setHolds] = useState<any[]>([]);
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   const canWrite = role === "admin";
@@ -107,11 +123,27 @@ export default function AdminDashboard() {
     setAuditLog(data.entries || []);
   };
 
+  const loadOrders = async () => {
+    const response = await fetch("/api/admin/orders?limit=20", { headers: getAuthHeaders() });
+    if (!response.ok) return;
+    const data = (await response.json()) as { orders?: any[] };
+    setOrders(data.orders || []);
+  };
+
+  const loadHolds = async () => {
+    const response = await fetch("/api/admin/holds", { headers: getAuthHeaders() });
+    if (!response.ok) return;
+    const data = (await response.json()) as { holds?: any[] };
+    setHolds(data.holds || []);
+  };
+
   useEffect(() => {
     loadConfig()
       .then(() => {
         loadAnalytics();
         loadAudit();
+        loadOrders();
+        loadHolds();
       })
       .catch(() => setStatus("Unable to load configuration."));
   }, []);
@@ -120,6 +152,11 @@ export default function AdminDashboard() {
     if (!config || !dirty || !canWrite) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     autosaveTimer.current = setTimeout(async () => {
+      const validationError = validateVariants(config.variants || []);
+      if (validationError) {
+        setStatus(validationError);
+        return;
+      }
       setSaving(true);
       try {
         const response = await fetch("/api/admin/config?autosave=1", {
@@ -147,8 +184,26 @@ export default function AdminDashboard() {
     setStatus("Not saved yet");
   };
 
+  const validateVariants = (items: SiteConfig["variants"]) => {
+    const seen = new Set<string>();
+    for (const variant of items) {
+      if (!variant.sku) return "Variant SKU is required.";
+      if (seen.has(variant.sku)) return "Duplicate variant SKU detected.";
+      seen.add(variant.sku);
+      if (variant.stockQty < 0) return "Variant stock cannot be negative.";
+      if (variant.weight !== undefined && variant.weight < 0) return "Variant weight cannot be negative.";
+      if (variant.price < 0) return "Variant price cannot be negative.";
+    }
+    return null;
+  };
+
   const handleManualSave = async () => {
     if (!config) return;
+    const validationError = validateVariants(config.variants || []);
+    if (validationError) {
+      setStatus(validationError);
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/admin/config", {
@@ -208,6 +263,7 @@ export default function AdminDashboard() {
   const reviews = config.reviews || [];
   const products = config.products || [];
   const optionGroups = config.optionGroups || [];
+  const variants = config.variants || [];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -232,6 +288,15 @@ export default function AdminDashboard() {
                 className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900"
               >
                 {saving ? "Saving..." : "Save now"}
+              </button>
+              <button
+                onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                  router.push("/admin/login");
+                }}
+                className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white/90"
+              >
+                Logout
               </button>
             </div>
           </div>
@@ -278,11 +343,119 @@ export default function AdminDashboard() {
               className="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
               onClick={() => {
                 const next = applyTemplate(config, templateId);
-                updateConfig(next);
+                updateConfig({ ...next, sections: normalizeSections(next.sections) });
               }}
             >
               Apply template
             </button>
+          </div>
+        </Section>
+
+        <Section title="Landing Sections" hint="Reorder and toggle sections that appear on the landing page.">
+          <div className="space-y-3">
+            {(normalizeSections(config.sections) || []).map((section, index) => (
+              <div key={section.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-slate-800">{section.type}</div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={section.enabled}
+                        onChange={(e) => {
+                          const next = normalizeSections(config.sections).map((s) =>
+                            s.id === section.id ? { ...s, enabled: e.target.checked } : s
+                          );
+                          updateConfig({ ...config, sections: next });
+                        }}
+                      />
+                      Enabled
+                    </label>
+                    <button
+                      type="button"
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs"
+                      onClick={() => {
+                        const next = normalizeSections(config.sections);
+                        if (index === 0) return;
+                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                        next.forEach((s, i) => (s.order = i + 1));
+                        updateConfig({ ...config, sections: next });
+                      }}
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs"
+                      onClick={() => {
+                        const next = normalizeSections(config.sections);
+                        if (index === next.length - 1) return;
+                        [next[index + 1], next[index]] = [next[index], next[index + 1]];
+                        next.forEach((s, i) => (s.order = i + 1));
+                        updateConfig({ ...config, sections: next });
+                      }}
+                    >
+                      Down
+                    </button>
+                  </div>
+                </div>
+                {section.type === "offer" && (
+                  <InputField
+                    label="Offer text"
+                    value={String(section.settings?.text || "")}
+                    onChange={(v) => {
+                      const next = normalizeSections(config.sections).map((s) =>
+                        s.id === section.id ? { ...s, settings: { ...(s.settings || {}), text: v } } : s
+                      );
+                      updateConfig({ ...config, sections: next });
+                    }}
+                  />
+                )}
+                {section.type === "countdown" && (
+                  <InputField
+                    label="Countdown end date (YYYY-MM-DD)"
+                    value={String(section.settings?.endDate || "")}
+                    onChange={(v) => {
+                      const next = normalizeSections(config.sections).map((s) =>
+                        s.id === section.id ? { ...s, settings: { ...(s.settings || {}), endDate: v } } : s
+                      );
+                      updateConfig({ ...config, sections: next });
+                    }}
+                  />
+                )}
+                {section.type === "faq" && (
+                  <TextAreaField
+                    label="FAQ items (JSON array)"
+                    value={JSON.stringify(section.settings?.items || [], null, 2)}
+                    onChange={(v) => {
+                      let items: any[] = [];
+                      try {
+                        const parsed = JSON.parse(v);
+                        if (Array.isArray(parsed)) items = parsed;
+                      } catch {
+                        items = [];
+                      }
+                      const next = normalizeSections(config.sections).map((s) =>
+                        s.id === section.id ? { ...s, settings: { ...(s.settings || {}), items } } : s
+                      );
+                      updateConfig({ ...config, sections: next });
+                    }}
+                  />
+                )}
+                {section.type === "sticky_buy" && (
+                  <InputField
+                    label="Sticky bar text"
+                    value={String(section.settings?.text || "")}
+                    onChange={(v) => {
+                      const next = normalizeSections(config.sections).map((s) =>
+                        s.id === section.id ? { ...s, settings: { ...(s.settings || {}), text: v } } : s
+                      );
+                      updateConfig({ ...config, sections: next });
+                    }}
+                  />
+                )}
+              </div>
+            ))}
           </div>
         </Section>
 
@@ -411,6 +584,81 @@ export default function AdminDashboard() {
             >
               Add option group
             </button>
+          </div>
+        </Section>
+
+        <Section title="Materialized variants" hint="Generate variants from option groups and edit stock/SKU/weight/images.">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => {
+                const next = materializeVariants(optionGroups, config.priceBdt, config.priceModifiers || {});
+                updateConfig({ ...config, variants: next });
+              }}
+            >
+              Generate variants
+            </button>
+            <span className="text-xs text-slate-500">Existing variants: {variants.length}</span>
+          </div>
+          <div className="space-y-3">
+            {variants.map((variant, index) => (
+              <div key={variant.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="text-xs text-slate-500">
+                  Options:{" "}
+                  {Object.entries(variant.optionValues || {})
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join(", ")}
+                </div>
+                <div className="grid gap-3 md:grid-cols-4">
+                  <InputField
+                    label="SKU"
+                    value={variant.sku}
+                    onChange={(v) => {
+                      const next = [...variants];
+                      next[index] = { ...variant, sku: v };
+                      updateConfig({ ...config, variants: next });
+                    }}
+                  />
+                  <InputField
+                    label="Stock qty"
+                    value={String(variant.stockQty)}
+                    onChange={(v) => {
+                      const next = [...variants];
+                      next[index] = { ...variant, stockQty: Math.max(0, Number(v || 0)) };
+                      updateConfig({ ...config, variants: next });
+                    }}
+                  />
+                  <InputField
+                    label="Weight (g)"
+                    value={variant.weight ? String(variant.weight) : ""}
+                    onChange={(v) => {
+                      const next = [...variants];
+                      next[index] = { ...variant, weight: v ? Number(v) : undefined };
+                      updateConfig({ ...config, variants: next });
+                    }}
+                  />
+                  <InputField
+                    label="Price (BDT)"
+                    value={String(variant.price)}
+                    onChange={(v) => {
+                      const next = [...variants];
+                      next[index] = { ...variant, price: Math.max(0, Number(v || 0)) };
+                      updateConfig({ ...config, variants: next });
+                    }}
+                  />
+                </div>
+                <InputField
+                  label="Images (comma separated URLs)"
+                  value={(variant.images || []).join(", ")}
+                  onChange={(v) => {
+                    const next = [...variants];
+                    next[index] = { ...variant, images: v.split(",").map((item) => item.trim()).filter(Boolean) };
+                    updateConfig({ ...config, variants: next });
+                  }}
+                />
+              </div>
+            ))}
           </div>
         </Section>
 
@@ -669,6 +917,133 @@ export default function AdminDashboard() {
             <TextAreaField label="Footer text" value={config.footerText} onChange={(v) => updateConfig({ ...config, footerText: v })} />
             <InputField label="YouTube embed URL" value={config.youtubeUrl} onChange={(v) => updateConfig({ ...config, youtubeUrl: v })} />
             <InputField label="Google review URL" value={config.googleReviewUrl} onChange={(v) => updateConfig({ ...config, googleReviewUrl: v })} />
+          </div>
+        </Section>
+
+        <Section title="Orders" hint="Manage order status and print packing slip.">
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" onClick={loadOrders}>
+              Refresh orders
+            </button>
+            <a
+              href="/api/admin/orders-csv"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold"
+            >
+              Export CSV
+            </a>
+          </div>
+          <div className="space-y-3">
+            {orders.map((order) => (
+              <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">{order.customerName}</div>
+                    <div className="text-xs text-slate-500">{order.phone}</div>
+                    <div className="text-xs text-slate-500">BDT {order.total}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={order.status}
+                      onChange={async (e) => {
+                        await fetch("/api/admin/order-status", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ orderId: order.id, status: e.target.value })
+                        });
+                        loadOrders();
+                        loadHolds();
+                      }}
+                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                    >
+                      {getOrderStatusOptions(order.status).map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                    <input
+                      value={order.trackingCode || ""}
+                      onChange={(e) => {
+                        const next = orders.map((item) =>
+                          item.id === order.id ? { ...item, trackingCode: e.target.value } : item
+                        );
+                        setOrders(next);
+                      }}
+                      placeholder="Tracking code"
+                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await fetch("/api/admin/order-tracking", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ orderId: order.id, trackingCode: order.trackingCode || "" })
+                        });
+                        loadOrders();
+                      }}
+                      className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                    >
+                      Update tracking
+                    </button>
+                    <a
+                      href={`/admin/packing/${order.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                    >
+                      Packing slip
+                    </a>
+                    <a
+                      href={`/admin/invoice/${order.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                    >
+                      Invoice
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="Inventory holds" hint="Release stuck reservations if needed.">
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" onClick={loadHolds}>
+              Refresh holds
+            </button>
+          </div>
+          <div className="space-y-3">
+            {holds.map((hold) => (
+              <div key={hold.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-slate-500 space-y-1">
+                  <div className="font-semibold text-slate-700">
+                    {hold.variant?.product?.name || "Product"} — {hold.variant?.name || hold.variantId}
+                  </div>
+                  <div>
+                    Qty {hold.quantity} • Expires {new Date(hold.expiresAt).toLocaleString()}
+                  </div>
+                  {hold.order && (
+                    <div className="text-slate-500">
+                      Linked order: {hold.order.id} • Status {hold.order.status}
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600"
+                  onClick={async () => {
+                    await fetch("/api/admin/holds-release", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ holdId: hold.id })
+                    });
+                    loadHolds();
+                  }}
+                >
+                  Release
+                </button>
+              </div>
+            ))}
           </div>
         </Section>
         <Section title="Analytics summary" hint="Live event counts from landing page.">

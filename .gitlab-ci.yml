@@ -1,0 +1,48 @@
+stages:
+  - install
+  - lint
+  - test
+  - build
+
+variables:
+  NODE_ENV: "test"
+  NEXT_TELEMETRY_DISABLED: "1"
+  DATABASE_URL: "postgresql://user:pass@localhost:5432/pen_landing"
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
+
+install:
+  stage: install
+  image: node:20
+  script:
+    - npm ci
+  artifacts:
+    paths:
+      - node_modules/
+
+lint:
+  stage: lint
+  image: node:20
+  script:
+    - npm run lint
+
+prisma-validate:
+  stage: lint
+  image: node:20
+  script:
+    - npx prisma validate
+
+test:
+  stage: test
+  image: node:20
+  script:
+    - npm run test
+
+build:
+  stage: build
+  image: node:20
+  script:
+    - npm run build

@@ -25,20 +25,20 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
 }
 
 export async function getConfig(): Promise<SiteConfig> {
-  const pool = getPool();
-  if (pool) {
-    try {
-      const result = await pool.query("select data from site_config where id = $1", [configId]);
-      if (result.rows[0]?.data) {
-        return deepMerge(defaultConfig, result.rows[0].data as Partial<SiteConfig>);
-      }
-    } catch (error) {
-      console.error("Failed to load config from database", error);
-    }
-  }
-
-  if (!fs.existsSync(dataPath)) return defaultConfig;
   try {
+    const pool = getPool();
+    if (pool) {
+      try {
+        const result = await pool.query("select data from site_config where id = $1", [configId]);
+        if (result.rows[0]?.data) {
+          return deepMerge(defaultConfig, result.rows[0].data as Partial<SiteConfig>);
+        }
+      } catch (error) {
+        console.error("Failed to load config from database", error);
+      }
+    }
+
+    if (!fs.existsSync(dataPath)) return defaultConfig;
     const raw = fs.readFileSync(dataPath, "utf8");
     const parsed = JSON.parse(raw) as Partial<SiteConfig>;
     return deepMerge(defaultConfig, parsed);

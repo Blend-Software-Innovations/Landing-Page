@@ -42,6 +42,26 @@ export type Experiment = {
   variants: ExperimentVariant[];
 };
 
+export type SectionType =
+  | "hero"
+  | "offer"
+  | "countdown"
+  | "gallery"
+  | "features"
+  | "reviews"
+  | "faq"
+  | "video"
+  | "order"
+  | "sticky_buy";
+
+export type SectionConfig = {
+  id: string;
+  type: SectionType;
+  enabled: boolean;
+  order: number;
+  settings?: Record<string, any>;
+};
+
 export type SiteConfig = {
   siteUrl: string;
   seoTitle: string;
@@ -120,8 +140,58 @@ export type SiteConfig = {
     outOfStock: boolean;
     badge: string;
   }>;
+  variants: Array<{
+    id: string;
+    optionValues: Record<string, string>;
+    sku: string;
+    stockQty: number;
+    weight?: number;
+    images: string[];
+    price: number;
+  }>;
   variantImages: Record<string, Record<string, string>>;
+  sections: SectionConfig[];
 };
+
+export const defaultSections: SectionConfig[] = [
+  { id: "section-hero", type: "hero", enabled: true, order: 1 },
+  { id: "section-offer", type: "offer", enabled: true, order: 2, settings: { text: "Limited batch — order today." } },
+  { id: "section-countdown", type: "countdown", enabled: false, order: 3, settings: { endDate: "" } },
+  { id: "section-gallery", type: "gallery", enabled: true, order: 4 },
+  { id: "section-features", type: "features", enabled: true, order: 5 },
+  { id: "section-reviews", type: "reviews", enabled: true, order: 6 },
+  { id: "section-video", type: "video", enabled: true, order: 7 },
+  { id: "section-order", type: "order", enabled: true, order: 8 },
+  {
+    id: "section-faq",
+    type: "faq",
+    enabled: true,
+    order: 9,
+    settings: {
+      items: [
+        { q: "How long is delivery?", a: "Dhaka: 24-48 hours. Outside Dhaka: 2-4 days." },
+        { q: "Is there a warranty?", a: "Yes, 6-month replacement warranty." },
+        { q: "Can I request a custom color?", a: "Yes, choose a custom color during order." }
+      ]
+    }
+  },
+  { id: "section-sticky", type: "sticky_buy", enabled: true, order: 10, settings: { text: "Order now — limited stock." } }
+];
+
+export function normalizeSections(sections?: SectionConfig[]) {
+  const base = defaultSections;
+  if (!sections || !sections.length) return base.map((s) => ({ ...s }));
+  const mapped = sections.map((item, index) => ({
+    ...item,
+    order: Number.isFinite(item.order) ? item.order : index + 1
+  }));
+  const types = new Set(mapped.map((item) => item.type));
+  const merged = [...mapped];
+  base.forEach((item) => {
+    if (!types.has(item.type)) merged.push({ ...item, order: merged.length + 1 });
+  });
+  return merged.sort((a, b) => a.order - b.order);
+}
 
 export const defaultConfig: SiteConfig = {
   siteUrl: "",
@@ -322,5 +392,7 @@ export const defaultConfig: SiteConfig = {
       badge: "Best seller"
     }
   ],
-  variantImages: {}
+  variants: [],
+  variantImages: {},
+  sections: defaultSections
 };

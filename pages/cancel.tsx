@@ -1,6 +1,22 @@
-﻿import Layout from "../components/Layout";
+﻿import { useEffect } from "react";
+import { useRouter } from "next/router";
+import Layout from "../components/Layout";
 
 export default function Cancel() {
+  const router = useRouter();
+  useEffect(() => {
+    if (!router.isReady) return;
+    const reservationId = String(router.query.reservation_id || "");
+    const reservationIds = String(router.query.reservation_ids || "");
+    if (reservationId || reservationIds) {
+      const ids = reservationIds ? reservationIds.split(",").filter(Boolean) : reservationId ? [reservationId] : [];
+      fetch("/api/inventory/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservationId, reservationIds: ids })
+      }).catch(() => undefined);
+    }
+  }, [router.isReady, router.query.reservation_id]);
   return (
     <Layout title="Payment canceled" description="Payment canceled">
       <section className="section py-20">

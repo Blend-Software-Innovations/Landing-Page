@@ -1,6 +1,9 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import { canWrite, resolveRole } from "../../../lib/adminAuth";
 import { isRateLimited } from "../../../lib/rateLimit";
+import { adminRateLimitPerMin } from "../../../lib/env";
+import { requireCsrf } from "../../../lib/csrf";
+import { requireDb } from "../../../lib/db";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -9,9 +12,9 @@ function sanitizeName(input: string) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const role = resolveRole(req);
+  const role = await resolveRole(req);
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`admin-upload-url:${ip}`, 20, 60_000)) {
+  if (isRateLimited(`admin-upload-url:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests." });
   }
 
@@ -23,6 +26,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
+  if (!requireDb(res)) return;
+  if (!requireCsrf(req, res)) return;
 
   const bucket = process.env.S3_BUCKET;
   const region = process.env.S3_REGION;
@@ -44,3 +49,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   return res.status(200).json({ uploadUrl, publicUrl: `${publicBase}/${key}` });
 }
+

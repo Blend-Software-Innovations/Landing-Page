@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum ProductType {
+  PHYSICAL
+  DIGITAL
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELED
+  RETURNED
+}
+
+enum PaymentMethod {
+  STRIPE
+  COD
+  BKASH
+  NAGAD
+  ROCKET
+  MANUAL
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIAL
+  REFUNDED
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(OWNER)
+  createdAt    DateTime @default(now())
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  type        ProductType @default(PHYSICAL)
+  category    String
+  brand       String
+  sku         String?     @unique
+  barcode     String?
+  basePrice   Int
+  description String
+  active      Boolean     @default(true)
+  variants    Variant[]
+  createdAt   DateTime    @default(now())
+}
+
+model Variant {
+  id        String   @id @default(cuid())
+  product   Product  @relation(fields: [productId], references: [id])
+  productId String
+  name      String
+  size      String?
+  color     String?
+  option    String?
+  price     Int
+  stockQty Int
+  weight    Int?
+  sku       String?  @unique
+  imageUrl  String?
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([sku])
+}
+
+model LandingPage {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String
+  config      Json
+  createdAt   DateTime @default(now())
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  config      Json
+  createdAt   DateTime @default(now())
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  status          OrderStatus   @default(PENDING)
+  customerName    String
+  phone           String
+  address         String
+  city            String
+  area            String?
+  total           Int
+  paymentMethod   PaymentMethod @default(COD)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  transactionId   String?
+  reservationId   String?       @unique
+  reservation     InventoryHold? @relation(fields: [reservationId], references: [id])
+  reservationIds  Json?
+  shippingPartner String?
+  trackingCode    String?
+  items           OrderItem[]
+  confirmedAt     DateTime?
+  packedAt        DateTime?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  canceledAt      DateTime?
+  returnedAt      DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   String
+  productId String
+  variantId String?
+  quantity  Int
+  unitPrice Int
+  lineTotal Int
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model InventoryHold {
+  id        String   @id @default(cuid())
+  variantId String
+  variant   Variant  @relation(fields: [variantId], references: [id])
+  quantity  Int
+  expiresAt DateTime
+  order     Order?
+
+  @@index([variantId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String?
+  role      String?
+  action    String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+
+
