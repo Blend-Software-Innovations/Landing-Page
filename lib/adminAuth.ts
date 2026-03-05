@@ -45,7 +45,13 @@ const rolePermissions: Record<Exclude<AdminRole, "none">, AdminPermission[]> = {
 };
 
 const encoder = new TextEncoder();
-const accessSecret = encoder.encode(env.AUTH_JWT_SECRET);
+
+function requireAccessSecret() {
+  if (!env.AUTH_JWT_SECRET) {
+    throw new Error("Missing AUTH_JWT_SECRET");
+  }
+  return encoder.encode(env.AUTH_JWT_SECRET);
+}
 
 function parseCookie(req: NextApiRequest, name: string) {
   const cookie = req.headers.cookie || "";
@@ -58,7 +64,7 @@ export async function resolveRole(req: NextApiRequest): Promise<AdminRole> {
   const token = parseCookie(req, "access_token");
   if (!token) return "none";
   try {
-    const { payload } = await jwtVerify(token, accessSecret);
+    const { payload } = await jwtVerify(token, requireAccessSecret());
     const role = (payload.role as AdminRole) || "none";
     return role;
   } catch {
@@ -70,7 +76,7 @@ export async function resolveActor(req: NextApiRequest) {
   const token = parseCookie(req, "access_token");
   if (!token) return { actor: "unknown", role: "none" as AdminRole };
   try {
-    const { payload } = await jwtVerify(token, accessSecret);
+    const { payload } = await jwtVerify(token, requireAccessSecret());
     const role = (payload.role as AdminRole) || "none";
     const sub = payload.sub as string | undefined;
     const user = sub ? findUserById(sub) : null;

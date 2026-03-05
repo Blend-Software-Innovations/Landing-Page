@@ -33,8 +33,20 @@ type ResetRecord = {
 };
 
 const encoder = new TextEncoder();
-const accessSecret = encoder.encode(env.AUTH_JWT_SECRET);
-const refreshSecret = encoder.encode(env.AUTH_REFRESH_SECRET);
+
+function requireAccessSecret() {
+  if (!env.AUTH_JWT_SECRET) {
+    throw new Error("Missing AUTH_JWT_SECRET");
+  }
+  return encoder.encode(env.AUTH_JWT_SECRET);
+}
+
+function requireRefreshSecret() {
+  if (!env.AUTH_REFRESH_SECRET) {
+    throw new Error("Missing AUTH_REFRESH_SECRET");
+  }
+  return encoder.encode(env.AUTH_REFRESH_SECRET);
+}
 
 function readUsers(): UserRecord[] {
   if (!fs.existsSync(usersPath)) return [];
@@ -80,6 +92,8 @@ export function findUserById(id: string) {
 }
 
 export async function issueTokens(user: UserRecord) {
+  const accessSecret = requireAccessSecret();
+  const refreshSecret = requireRefreshSecret();
   const accessToken = await new SignJWT({ sub: user.id, role: user.role })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -121,6 +135,7 @@ function writeRefresh(records: RefreshRecord[]) {
 }
 
 export async function rotateRefreshToken(token: string) {
+  const refreshSecret = requireRefreshSecret();
   const { payload } = await jwtVerify(token, refreshSecret);
   const jti = payload.jti as string | undefined;
   const userId = payload.sub as string | undefined;
@@ -142,6 +157,7 @@ export async function rotateRefreshToken(token: string) {
 
 export function revokeRefreshToken(token: string) {
   try {
+    const refreshSecret = requireRefreshSecret();
     const decoded = jwtVerify(token, refreshSecret);
     return decoded.then(({ payload }) => {
       const jti = payload.jti as string | undefined;
@@ -174,6 +190,12 @@ export async function createResetToken(email: string) {
   fs.mkdirSync(path.dirname(resetPath), { recursive: true });
   fs.appendFileSync(resetPath, `${JSON.stringify(record)}\n`);
   return token;
+}
+
+export async function validateAccessToken(token: string) {
+  const accessSecret = requireAccessSecret();
+  const { payload } = await jwtVerify(token, accessSecret);
+  return payload;
 }
 
 export async function resetPassword(token: string, newPassword: string) {
