@@ -1,5 +1,5 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
-import { canWrite, resolveRole } from "../../../lib/adminAuth";
+import { hasPermission, resolveRole } from "../../../lib/adminAuth";
 import { isRateLimited } from "../../../lib/rateLimit";
 import { adminRateLimitPerMin } from "../../../lib/env";
 import { requireCsrf } from "../../../lib/csrf";
@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(429).json({ error: "Too many requests." });
   }
 
-  if (!canWrite(role)) {
+  if (!hasPermission(role, "media:write")) {
     return res.status(403).json({ error: "Forbidden" });
   }
 

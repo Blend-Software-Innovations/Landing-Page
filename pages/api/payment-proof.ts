@@ -8,12 +8,23 @@ import { reserveInventory, releaseInventory } from "../../lib/inventory";
 import { createOrder } from "../../lib/orders";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
+import { writeOrderAudit } from "../../lib/notifications";
+import { getConfig } from "../../lib/siteConfig.server";
+import { validateOtpToken } from "../../lib/otp";
 
 export const config = {
   api: { bodyParser: false }
 };
 
 const dataPath = path.join(process.cwd(), "data", "manual-payments.jsonl");
+
+function normalizePhone(input: string) {
+  const digits = input.replace(/\D/g, "");
+  if (digits.startsWith("8801")) return `+${digits}`;
+  if (digits.startsWith("01")) return `+88${digits}`;
+  if (digits.startsWith("880")) return `+${digits}`;
+  return input;
+}
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -41,6 +52,19 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
       const payloadRaw = String(fields.payload || "{}");
       const payload = JSON.parse(payloadRaw);
+      const config = await getConfig();
+      if (config.features?.otpEnabled) {
+        const normalizedPhone = normalizePhone(String(payload.phone || ""));
+        const otpToken = String(payload.otpToken || "");
+        if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
+          return res.status(401).json({ error: "OTP verification required" });
+        }
+      }
+      const txnId = String(payload.transactionId || "").trim();
+      const txnRegex = /^[A-Z0-9]{8,20}$/i;
+      if (!txnId || !txnRegex.test(txnId)) {
+        return res.status(400).json({ error: "Invalid transaction ID" });
+      }
       const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
       const items = itemsRaw.length
         ? itemsRaw.map((item: any) => ({
@@ -74,7 +98,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       }
       const upload = await uploadImage(file.filepath, file.originalFilename || "payment-proof.jpg", "public");
       const record = { ...payload, reservationIds, proofUrl: upload.url, createdAt: new Date().toISOString() };
-      await createOrder({
+      const order = await createOrder({
         customerName: payload.name || "",
         phone: payload.phone || "",
         address: payload.address || "",
@@ -83,7 +107,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         total: Number(payload.total || 0),
         paymentMethod: "MANUAL",
         paymentStatus: "PARTIAL",
-        transactionId: payload.transactionId || undefined,
+        transactionId: txnId || undefined,
+        manualStatus: "PENDING",
+        manualProofUrl: upload.url,
+        manualSubmittedAt: new Date().toISOString(),
         productId: payload.productId || "",
         variantId: payload.variantId || "",
         quantity: Number(payload.quantity || 1),
@@ -91,6 +118,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         reservationIds,
         items,
         status: "PENDING"
+      });
+      await writeOrderAudit({
+        orderId: order.id,
+        action: "payment.manual.submitted",
+        data: { transactionId: txnId, proofUrl: upload.url }
       });
       fs.mkdirSync(path.dirname(dataPath), { recursive: true });
       fs.appendFileSync(dataPath, `${JSON.stringify(record)}\n`);

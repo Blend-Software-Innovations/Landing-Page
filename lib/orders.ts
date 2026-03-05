@@ -14,6 +14,11 @@ export type OrderPayload = {
   paymentMethod: string;
   paymentStatus: string;
   transactionId?: string;
+  manualStatus?: "PENDING" | "VERIFIED" | "REJECTED";
+  manualProofUrl?: string;
+  manualSubmittedAt?: string;
+  manualReviewedAt?: string;
+  manualReviewNote?: string;
   productId?: string;
   variantId?: string;
   quantity: number;
@@ -91,6 +96,11 @@ export async function createOrder(payload: OrderPayload) {
       paymentMethod: payload.paymentMethod,
       paymentStatus: payload.paymentStatus,
       transactionId: payload.transactionId || null,
+      manualStatus: payload.manualStatus || null,
+      manualProofUrl: payload.manualProofUrl || null,
+      manualSubmittedAt: payload.manualSubmittedAt ? new Date(payload.manualSubmittedAt) : null,
+      manualReviewedAt: payload.manualReviewedAt ? new Date(payload.manualReviewedAt) : null,
+      manualReviewNote: payload.manualReviewNote || null,
       reservationId: payload.reservationId || null,
       reservationIds: payload.reservationIds?.length ? payload.reservationIds : null,
       items: {

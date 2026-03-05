@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -43,6 +44,12 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum ManualPaymentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 model AdminUser {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -80,6 +87,7 @@ model Variant {
   sku       String?  @unique
   imageUrl  String?
   createdAt DateTime @default(now())
+  inventoryHolds InventoryHold[]
 
   @@index([productId])
   @@index([sku])
@@ -113,6 +121,11 @@ model Order {
   total           Int
   paymentMethod   PaymentMethod @default(COD)
   paymentStatus   PaymentStatus @default(UNPAID)
+  manualStatus    ManualPaymentStatus?
+  manualProofUrl  String?
+  manualSubmittedAt DateTime?
+  manualReviewedAt DateTime?
+  manualReviewNote String?
   transactionId   String?
   reservationId   String?       @unique
   reservation     InventoryHold? @relation(fields: [reservationId], references: [id])

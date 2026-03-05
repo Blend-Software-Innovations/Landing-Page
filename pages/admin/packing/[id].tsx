@@ -97,6 +97,23 @@ export default function PackingSlip({ order }: { order: any }) {
           <span className="text-slate-500">Thank you for your order.</span>
           <span className="font-semibold text-slate-900">Total: BDT {order.total}</span>
         </div>
+        <div className="mt-6 flex flex-wrap gap-2 text-xs text-slate-600">
+          {[
+            { label: "Placed", value: order.createdAt },
+            { label: "Confirmed", value: order.confirmedAt },
+            { label: "Packed", value: order.packedAt },
+            { label: "Shipped", value: order.shippedAt },
+            { label: "Delivered", value: order.deliveredAt },
+            { label: "Canceled", value: order.canceledAt },
+            { label: "Returned", value: order.returnedAt }
+          ]
+            .filter((item) => item.value)
+            .map((item) => (
+              <span key={item.label} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                {item.label}: {new Date(item.value).toLocaleString()}
+              </span>
+            ))}
+        </div>
       </div>
     </div>
   );

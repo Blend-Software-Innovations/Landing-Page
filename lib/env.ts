@@ -11,6 +11,12 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_PER_MIN: z.string().optional(),
   ADMIN_RATE_LIMIT_PER_MIN: z.string().optional(),
   PUBLIC_RATE_LIMIT_PER_MIN: z.string().optional(),
+  OTP_LENGTH: z.string().optional(),
+  OTP_TTL_MIN: z.string().optional(),
+  OTP_SESSION_TTL_MIN: z.string().optional(),
+  OTP_RESEND_COOLDOWN_SEC: z.string().optional(),
+  OTP_LOCKOUT_MAX_ATTEMPTS: z.string().optional(),
+  OTP_LOCKOUT_MIN: z.string().optional(),
   NEXT_PUBLIC_SITE_URL: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -30,3 +36,9 @@ export const authAllowlist = (env.AUTH_ALLOWLIST_ORIGINS || "")
 export const authRateLimitPerMin = Number(env.AUTH_RATE_LIMIT_PER_MIN || "20");
 export const adminRateLimitPerMin = Number(env.ADMIN_RATE_LIMIT_PER_MIN || "60");
 export const publicRateLimitPerMin = Number(env.PUBLIC_RATE_LIMIT_PER_MIN || "120");
+export const otpLength = Number(env.OTP_LENGTH || "6");
+export const otpTtlMin = Number(env.OTP_TTL_MIN || "5");
+export const otpSessionTtlMin = Number(env.OTP_SESSION_TTL_MIN || "30");
+export const otpResendCooldownSec = Number(env.OTP_RESEND_COOLDOWN_SEC || "60");
+export const otpLockoutMaxAttempts = Number(env.OTP_LOCKOUT_MAX_ATTEMPTS || "5");
+export const otpLockoutMin = Number(env.OTP_LOCKOUT_MIN || "10");

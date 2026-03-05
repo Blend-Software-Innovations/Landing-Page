@@ -1,7 +1,7 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import formidable from "formidable";
 import os from "os";
-import { canRead, resolveRole } from "../../../lib/adminAuth";
+import { hasPermission, resolveRole } from "../../../lib/adminAuth";
 import { isRateLimited } from "../../../lib/rateLimit";
 import { adminRateLimitPerMin } from "../../../lib/env";
 import { requireCsrf } from "../../../lib/csrf";
@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(429).json({ error: "Too many uploads. Please try again shortly." });
   }
 
-  if (!canRead(role)) {
+  if (!hasPermission(role, "media:write")) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 

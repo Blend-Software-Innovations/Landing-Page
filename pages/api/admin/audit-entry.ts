@@ -1,5 +1,5 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
-import { canRead, resolveRole } from "../../../lib/adminAuth";
+import { hasPermission, resolveRole } from "../../../lib/adminAuth";
 import { isRateLimited } from "../../../lib/rateLimit";
 import { getAuditEntry } from "../../../lib/audit";
 import { adminRateLimitPerMin } from "../../../lib/env";
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(429).json({ error: "Too many requests." });
   }
 
-  if (!canRead(role)) {
+  if (!hasPermission(role, "audit:read")) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 

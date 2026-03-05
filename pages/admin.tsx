@@ -84,10 +84,16 @@ export default function AdminDashboard() {
   const [auditLog, setAuditLog] = useState<Array<{ id: string; createdAt: string; actor?: string; role?: string; data?: SiteConfig }>>([]);
   const [templateId, setTemplateId] = useState<string>(templates[0]?.id || "");
   const [orders, setOrders] = useState<any[]>([]);
+  const [manualFilter, setManualFilter] = useState<"ALL" | "PENDING" | "VERIFIED" | "REJECTED">("PENDING");
+  const [manualSummary, setManualSummary] = useState<{ pending: number; verified: number; rejected: number } | null>(null);
+  const [otpMetrics, setOtpMetrics] = useState<Array<{ phone: string; lastRequested?: string; attempts: number; pending: number; cooldownUntil?: string; lockedUntil?: string }>>([]);
+  const [otpSearch, setOtpSearch] = useState("");
   const [holds, setHolds] = useState<any[]>([]);
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const canWrite = role === "admin";
+  const canWrite = role === "admin" || role === "owner";
+  const canManageOrders = role === "admin" || role === "owner";
+  const canManageInventory = role === "admin" || role === "owner";
 
   const loadConfig = async () => {
     const headers = getAuthHeaders();
@@ -124,10 +130,28 @@ export default function AdminDashboard() {
   };
 
   const loadOrders = async () => {
-    const response = await fetch("/api/admin/orders?limit=20", { headers: getAuthHeaders() });
+    const query =
+      manualFilter === "ALL"
+        ? "&paymentMethod=MANUAL"
+        : `&paymentMethod=MANUAL&manualStatus=${manualFilter}`;
+    const response = await fetch(`/api/admin/orders?limit=20${query}`, { headers: getAuthHeaders() });
     if (!response.ok) return;
     const data = (await response.json()) as { orders?: any[] };
     setOrders(data.orders || []);
+  };
+
+  const loadManualSummary = async () => {
+    const response = await fetch("/api/admin/manual-review-summary", { headers: getAuthHeaders() });
+    if (!response.ok) return;
+    const data = (await response.json()) as { pending: number; verified: number; rejected: number };
+    setManualSummary(data);
+  };
+
+  const loadOtpMetrics = async () => {
+    const response = await fetch("/api/admin/otp-metrics", { headers: getAuthHeaders() });
+    if (!response.ok) return;
+    const data = (await response.json()) as { rows?: Array<any> };
+    setOtpMetrics(data.rows || []);
   };
 
   const loadHolds = async () => {
@@ -138,15 +162,21 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    loadConfig()
-      .then(() => {
-        loadAnalytics();
-        loadAudit();
-        loadOrders();
-        loadHolds();
-      })
-      .catch(() => setStatus("Unable to load configuration."));
-  }, []);
+        loadConfig()
+          .then(() => {
+            loadAnalytics();
+            loadAudit();
+            loadOrders();
+            loadManualSummary();
+            loadOtpMetrics();
+            loadHolds();
+          })
+          .catch(() => setStatus("Unable to load configuration."));
+      }, []);
+
+    useEffect(() => {
+      loadOrders();
+    }, [manualFilter]);
 
   useEffect(() => {
     if (!config || !dirty || !canWrite) return;
@@ -195,6 +225,32 @@ export default function AdminDashboard() {
       if (variant.price < 0) return "Variant price cannot be negative.";
     }
     return null;
+  };
+
+  const applySectionDefaults = (product: { name?: string; subtitle?: string; badge?: string }) => {
+    const base = normalizeSections();
+    return base.map((section) => {
+      if (section.type === "offer") {
+        return {
+          ...section,
+          settings: { ...section.settings, text: product.badge || product.subtitle || product.name || "Limited batch" }
+        };
+      }
+      if (section.type === "sticky_buy") {
+        return {
+          ...section,
+          settings: { ...section.settings, text: product.name ? `Order ${product.name}` : "Order now" }
+        };
+      }
+      return section;
+    });
+  };
+
+  const formatDate = (value?: string) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString();
   };
 
   const handleManualSave = async () => {
@@ -471,6 +527,27 @@ export default function AdminDashboard() {
             <TextAreaField label="Hero title (BN)" value={config.heroTitle.bn} onChange={(v) => updateConfig({ ...config, heroTitle: { ...config.heroTitle, bn: v } })} />
             <TextAreaField label="Hero body (EN)" value={config.heroBody.en} onChange={(v) => updateConfig({ ...config, heroBody: { ...config.heroBody, en: v } })} />
             <TextAreaField label="Hero body (BN)" value={config.heroBody.bn} onChange={(v) => updateConfig({ ...config, heroBody: { ...config.heroBody, bn: v } })} />
+            <div className="space-y-2">
+              <InputField label="Signature image" value={config.signatureImage} onChange={(v) => updateConfig({ ...config, signatureImage: v })} />
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                Upload signature image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const result = await handleUpload(file);
+                      updateConfig({ ...config, signatureImage: result.url });
+                    } catch {
+                      setStatus("Signature image upload failed");
+                    }
+                  }}
+                />
+              </label>
+            </div>
           </div>
         </Section>
 
@@ -479,7 +556,27 @@ export default function AdminDashboard() {
             <InputField label="Site URL" value={config.siteUrl} onChange={(v) => updateConfig({ ...config, siteUrl: v })} />
             <InputField label="SEO title" value={config.seoTitle} onChange={(v) => updateConfig({ ...config, seoTitle: v })} />
             <TextAreaField label="SEO description" value={config.seoDescription} onChange={(v) => updateConfig({ ...config, seoDescription: v })} />
-            <InputField label="SEO image" value={config.seoImage} onChange={(v) => updateConfig({ ...config, seoImage: v })} />
+            <div className="space-y-2">
+              <InputField label="SEO image" value={config.seoImage} onChange={(v) => updateConfig({ ...config, seoImage: v })} />
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                Upload SEO image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const result = await handleUpload(file);
+                      updateConfig({ ...config, seoImage: result.url });
+                    } catch {
+                      setStatus("SEO image upload failed");
+                    }
+                  }}
+                />
+              </label>
+            </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <InputField label="WhatsApp" value={config.social.whatsapp} onChange={(v) => updateConfig({ ...config, social: { ...config.social, whatsapp: v } })} />
@@ -664,7 +761,7 @@ export default function AdminDashboard() {
 
         <Section title="Products" hint="Enable multi-product mode to sell multiple items.">
           <div className="flex flex-wrap gap-3 text-sm">
-            {(["inventoryEnabled", "variantImagesEnabled", "multiProductEnabled", "categoriesEnabled"] as const).map((flag) => (
+            {(["inventoryEnabled", "variantImagesEnabled", "multiProductEnabled", "categoriesEnabled", "otpEnabled"] as const).map((flag) => (
               <label key={flag} className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2">
                 <input
                   type="checkbox"
@@ -674,6 +771,26 @@ export default function AdminDashboard() {
                 <span>{flag}</span>
               </label>
             ))}
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold text-slate-600">Active product</span>
+            <select
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+              value={config.activeProductId}
+              onChange={(e) => {
+                const id = e.target.value;
+                const product = products.find((item) => item.id === id) || products[0];
+                const nextSections = applySectionDefaults(product || {});
+                updateConfig({ ...config, activeProductId: id, sections: nextSections });
+              }}
+            >
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-slate-500">Selecting a product refreshes landing sections.</span>
           </div>
           <div className="space-y-4">
             {products.map((product, index) => (
@@ -900,6 +1017,96 @@ export default function AdminDashboard() {
           </div>
         </Section>
 
+        <Section title="OTP Security" hint="Tune OTP behavior and review per-phone stats.">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 grid gap-4 md:grid-cols-3 text-sm">
+            <InputField
+              label="OTP cooldown (sec)"
+              value={String(config.otpSettings?.cooldownSec ?? 60)}
+              onChange={(v) =>
+                updateConfig({
+                  ...config,
+                  otpSettings: { ...config.otpSettings, cooldownSec: Math.max(10, Number(v || 0)) }
+                })
+              }
+            />
+            <InputField
+              label="OTP lockout attempts"
+              value={String(config.otpSettings?.lockoutAttempts ?? 5)}
+              onChange={(v) =>
+                updateConfig({
+                  ...config,
+                  otpSettings: { ...config.otpSettings, lockoutAttempts: Math.max(1, Number(v || 0)) }
+                })
+              }
+            />
+            <InputField
+              label="OTP lockout minutes"
+              value={String(config.otpSettings?.lockoutMin ?? 10)}
+              onChange={(v) =>
+                updateConfig({
+                  ...config,
+                  otpSettings: { ...config.otpSettings, lockoutMin: Math.max(1, Number(v || 0)) }
+                })
+              }
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold"
+              onClick={loadOtpMetrics}
+            >
+              Refresh OTP metrics
+            </button>
+            <a
+              href="/api/admin/otp-metrics-csv"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold"
+            >
+              Export CSV
+            </a>
+            <input
+              value={otpSearch}
+              onChange={(e) => setOtpSearch(e.target.value)}
+              placeholder="Search phone"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm"
+            />
+          </div>
+          <div className="space-y-2 text-xs">
+            {otpMetrics
+              .filter((row) => (otpSearch ? row.phone.includes(otpSearch.trim()) : true))
+              .map((row) => (
+              <div key={row.phone} className="rounded-2xl border border-slate-200 bg-white p-3 flex flex-wrap gap-3 items-center justify-between">
+                <div className="font-semibold text-slate-700">{row.phone}</div>
+                <div className="text-slate-500">Attempts: {row.attempts}</div>
+                <div className="text-slate-500">Pending OTPs: {row.pending}</div>
+                {row.cooldownUntil && (
+                  <div className="text-amber-600">Cooldown until {new Date(row.cooldownUntil).toLocaleString()}</div>
+                )}
+                {row.lockedUntil && (
+                  <div className="text-rose-600">Locked until {new Date(row.lockedUntil).toLocaleString()}</div>
+                )}
+                {row.lastRequested && (
+                  <div className="text-slate-400">Last: {new Date(row.lastRequested).toLocaleString()}</div>
+                )}
+                <button
+                  type="button"
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold"
+                  onClick={async () => {
+                    await fetch("/api/admin/otp-reset", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                      body: JSON.stringify({ phone: row.phone })
+                    });
+                    loadOtpMetrics();
+                  }}
+                >
+                  Reset lockout
+                </button>
+              </div>
+            ))}
+            {!otpMetrics.length && <div className="text-slate-500">No OTP activity yet.</div>}
+          </div>
+        </Section>
+
         <Section title="Merchant & Payments" hint="Manual payment details shown to customers.">
           <div className="grid gap-4 md:grid-cols-2">
             <InputField label="Bank name" value={config.merchant.bankName} onChange={(v) => updateConfig({ ...config, merchant: { ...config.merchant, bankName: v } })} />
@@ -920,11 +1127,29 @@ export default function AdminDashboard() {
           </div>
         </Section>
 
-        <Section title="Orders" hint="Manage order status and print packing slip.">
-          <div className="flex flex-wrap items-center gap-3">
-            <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" onClick={loadOrders}>
-              Refresh orders
-            </button>
+          <Section title="Orders" hint="Manage order status and print packing slip.">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
+                <span>Manual review filter</span>
+                <select
+                  className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs"
+                  value={manualFilter}
+                  onChange={(e) => setManualFilter(e.target.value as any)}
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value="VERIFIED">Verified</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="ALL">All manual</option>
+                </select>
+              </label>
+              {manualSummary && (
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                  Pending: {manualSummary.pending}
+                </span>
+              )}
+              <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" onClick={loadOrders}>
+                Refresh orders
+              </button>
             <a
               href="/api/admin/orders-csv"
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold"
@@ -942,48 +1167,53 @@ export default function AdminDashboard() {
                     <div className="text-xs text-slate-500">BDT {order.total}</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={order.status}
-                      onChange={async (e) => {
-                        await fetch("/api/admin/order-status", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ orderId: order.id, status: e.target.value })
-                        });
-                        loadOrders();
-                        loadHolds();
-                      }}
-                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
-                    >
+                      <select
+                        value={order.status}
+                        onChange={async (e) => {
+                          if (!canManageOrders) return;
+                          await fetch("/api/admin/order-status", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({ orderId: order.id, status: e.target.value })
+                          });
+                          loadOrders();
+                          loadHolds();
+                        }}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                        disabled={!canManageOrders}
+                      >
                       {getOrderStatusOptions(order.status).map((status) => (
                         <option key={status} value={status}>{status}</option>
                       ))}
                     </select>
-                    <input
-                      value={order.trackingCode || ""}
-                      onChange={(e) => {
-                        const next = orders.map((item) =>
-                          item.id === order.id ? { ...item, trackingCode: e.target.value } : item
-                        );
-                        setOrders(next);
-                      }}
-                      placeholder="Tracking code"
-                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await fetch("/api/admin/order-tracking", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ orderId: order.id, trackingCode: order.trackingCode || "" })
-                        });
-                        loadOrders();
-                      }}
-                      className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
-                    >
-                      Update tracking
-                    </button>
+                      <input
+                        value={order.trackingCode || ""}
+                        onChange={(e) => {
+                          const next = orders.map((item) =>
+                            item.id === order.id ? { ...item, trackingCode: e.target.value } : item
+                          );
+                          setOrders(next);
+                        }}
+                        placeholder="Tracking code"
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                        disabled={!canManageOrders}
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!canManageOrders) return;
+                          await fetch("/api/admin/order-tracking", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({ orderId: order.id, trackingCode: order.trackingCode || "" })
+                          });
+                          loadOrders();
+                        }}
+                        className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                        disabled={!canManageOrders}
+                      >
+                        Update tracking
+                      </button>
                     <a
                       href={`/admin/packing/${order.id}`}
                       target="_blank"
@@ -992,20 +1222,105 @@ export default function AdminDashboard() {
                     >
                       Packing slip
                     </a>
-                    <a
-                      href={`/admin/invoice/${order.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
-                    >
-                      Invoice
-                    </a>
+                      <a
+                        href={`/admin/invoice/${order.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                      >
+                        Invoice
+                      </a>
+                      <a
+                        href={`/api/admin/invoice-pdf?id=${order.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                      >
+                        Invoice PDF
+                      </a>
+                  </div>
+                  </div>
+                  {order.paymentMethod === "MANUAL" && (
+                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="font-semibold">
+                            Manual payment — {order.manualStatus || "PENDING"}
+                          </div>
+                          {order.transactionId && <div>Txn ID: {order.transactionId}</div>}
+                          {order.manualProofUrl && (
+                            <a
+                              href={order.manualProofUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                            >
+                              View payment proof
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
+                            onClick={async () => {
+                              if (!canManageOrders) return;
+                              const note = window.prompt("Verification note (optional)") || "";
+                              await fetch("/api/admin/manual-payment-review", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                                body: JSON.stringify({ orderId: order.id, status: "VERIFIED", note })
+                              });
+                              loadOrders();
+                              loadManualSummary();
+                            }}
+                            disabled={!canManageOrders}
+                          >
+                            Verify
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                            onClick={async () => {
+                              if (!canManageOrders) return;
+                              const note = window.prompt("Rejection reason (optional)") || "";
+                              await fetch("/api/admin/manual-payment-review", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                                body: JSON.stringify({ orderId: order.id, status: "REJECTED", note })
+                              });
+                              loadOrders();
+                              loadManualSummary();
+                            }}
+                            disabled={!canManageOrders}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                    {[
+                      { label: "Placed", value: order.createdAt },
+                      { label: "Confirmed", value: order.confirmedAt },
+                      { label: "Packed", value: order.packedAt },
+                      { label: "Shipped", value: order.shippedAt },
+                      { label: "Delivered", value: order.deliveredAt },
+                      { label: "Canceled", value: order.canceledAt },
+                      { label: "Returned", value: order.returnedAt }
+                    ]
+                      .filter((item) => formatDate(item.value))
+                      .map((item) => (
+                        <span key={item.label} className="rounded-full border border-slate-200 bg-white px-3 py-1">
+                          {item.label}: {formatDate(item.value)}
+                        </span>
+                      ))}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Section>
+              ))}
+            </div>
+          </Section>
 
         <Section title="Inventory holds" hint="Release stuck reservations if needed.">
           <div className="flex flex-wrap items-center gap-3">
@@ -1029,19 +1344,21 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </div>
-                <button
-                  className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600"
-                  onClick={async () => {
-                    await fetch("/api/admin/holds-release", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ holdId: hold.id })
-                    });
-                    loadHolds();
-                  }}
-                >
-                  Release
-                </button>
+                  <button
+                    className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600"
+                    onClick={async () => {
+                      if (!canManageInventory) return;
+                      await fetch("/api/admin/holds-release", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                        body: JSON.stringify({ holdId: hold.id })
+                      });
+                      loadHolds();
+                    }}
+                    disabled={!canManageInventory}
+                  >
+                    Release
+                  </button>
               </div>
             ))}
           </div>

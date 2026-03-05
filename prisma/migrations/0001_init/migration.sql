@@ -1,4 +1,4 @@
-﻿-- Create enums
+-- Create enums
 CREATE TYPE "Role" AS ENUM ('OWNER', 'ADMIN', 'STAFF');
 CREATE TYPE "ProductType" AS ENUM ('PHYSICAL', 'DIGITAL');
 CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED', 'CANCELED', 'RETURNED');

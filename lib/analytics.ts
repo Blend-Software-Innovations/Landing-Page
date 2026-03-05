@@ -1,6 +1,7 @@
 ﻿import fs from "fs";
 import path from "path";
 import { getPool } from "./db";
+import { nanoid } from "nanoid";
 
 export type AnalyticsEvent = {
   name: string;
@@ -17,9 +18,10 @@ export async function recordEvent(event: AnalyticsEvent) {
   const pool = getPool();
   if (pool) {
     try {
+      const id = nanoid();
       await pool.query(
-        "insert into analytics_events (event_name, payload, created_at, ip, user_agent, referrer) values ($1, $2, $3, $4, $5, $6)",
-        [event.name, event.payload || {}, event.createdAt, event.ip || null, event.userAgent || null, event.referrer || null]
+        "insert into analytics_events (id, event_name, payload, created_at, ip, user_agent, referrer) values ($1, $2, $3, $4, $5, $6, $7)",
+        [id, event.name, event.payload || {}, event.createdAt, event.ip || null, event.userAgent || null, event.referrer || null]
       );
       return;
     } catch (error) {

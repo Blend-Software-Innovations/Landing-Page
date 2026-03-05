@@ -1,6 +1,6 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import { getConfig, saveConfig } from "../../../lib/siteConfig.server";
-import { canRead, canWrite, resolveRole } from "../../../lib/adminAuth";
+import { hasPermission, resolveRole } from "../../../lib/adminAuth";
 import { isRateLimited } from "../../../lib/rateLimit";
 import { adminRateLimitPerMin } from "../../../lib/env";
 import { requireCsrf } from "../../../lib/csrf";
@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(429).json({ error: "Too many requests." });
   }
 
-  if (!canRead(role)) {
+  if (!hasPermission(role, "config:read")) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   if (!requireDb(res)) return;
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "POST") {
-    if (!canWrite(role)) {
+    if (!hasPermission(role, "config:write")) {
       return res.status(403).json({ error: "Forbidden" });
     }
     if (!requireCsrf(req, res)) return;

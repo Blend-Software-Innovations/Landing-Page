@@ -36,7 +36,17 @@ type UiCopy = {
   codFailure: string;
   manualProofError: string;
   manualTxnError: string;
+  manualTxnFormatError: string;
   manualSuccess: string;
+  otpTitle: string;
+  otpSend: string;
+  otpVerify: string;
+  otpCode: string;
+  otpSent: string;
+  otpVerified: string;
+  otpRequired: string;
+  otpInvalid: string;
+  otpNote: string;
   codCta: string;
   manualCta: string;
   paymentStripe: string;
@@ -98,7 +108,17 @@ const ui: Record<Lang, UiCopy> = {
     codFailure: "Unable to place COD order. Please try again.",
     manualProofError: "Please upload a payment screenshot.",
     manualTxnError: "Please enter a transaction ID.",
+    manualTxnFormatError: "Transaction ID format is invalid.",
     manualSuccess: "Manual payment submitted. We will verify and confirm.",
+    otpTitle: "Phone verification (OTP)",
+    otpSend: "Send OTP",
+    otpVerify: "Verify OTP",
+    otpCode: "OTP code",
+    otpSent: "OTP sent. Please check your phone.",
+    otpVerified: "Phone verified.",
+    otpRequired: "Please verify OTP before placing order.",
+    otpInvalid: "OTP verification failed.",
+    otpNote: "We use OTP to reduce fake orders.",
     codCta: "Confirm COD Order",
     manualCta: "Submit Payment Proof",
     paymentStripe: "Pay instantly with Stripe",
@@ -158,7 +178,17 @@ const ui: Record<Lang, UiCopy> = {
     codFailure: "COD অর্ডার দেওয়া যায়নি। আবার চেষ্টা করুন।",
     manualProofError: "পেমেন্ট স্ক্রিনশট আপলোড করুন।",
     manualTxnError: "ট্রান্স্যাকশন আইডি লিখুন।",
+    manualTxnFormatError: "ট্রান্স্যাকশন আইডি ফরম্যাট ঠিক নেই।",
     manualSuccess: "ম্যানুয়াল পেমেন্ট সাবমিট হয়েছে। ভেরিফাই করে কনফার্ম করা হবে।",
+    otpTitle: "ফোন ভেরিফিকেশন (OTP)",
+    otpSend: "OTP পাঠান",
+    otpVerify: "OTP যাচাই",
+    otpCode: "OTP কোড",
+    otpSent: "OTP পাঠানো হয়েছে। ফোন চেক করুন।",
+    otpVerified: "ফোন ভেরিফাই হয়েছে।",
+    otpRequired: "অর্ডার করার আগে OTP ভেরিফাই করুন।",
+    otpInvalid: "OTP যাচাই ব্যর্থ হয়েছে।",
+    otpNote: "ফেক অর্ডার কমানোর জন্য OTP ব্যবহার করা হয়।",
     codCta: "COD অর্ডার কনফার্ম করুন",
     manualCta: "পেমেন্ট প্রুফ সাবমিট করুন",
     paymentStripe: "Stripe দিয়ে সাথে সাথে পেমেন্ট",
@@ -337,6 +367,14 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const [giftWrap, setGiftWrap] = useState(false);
   const [cod, setCod] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual">("stripe");
+  const [otpId, setOtpId] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpToken, setOtpToken] = useState("");
+  const [otpStatus, setOtpStatus] = useState<string | null>(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
+  const [otpCooldownRemaining, setOtpCooldownRemaining] = useState(0);
   const [deliveryZone, setDeliveryZone] = useState<"insideDhaka" | "outsideDhaka">("insideDhaka");
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -403,7 +441,8 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     inventoryEnabled: false,
     variantImagesEnabled: false,
     multiProductEnabled: false,
-    categoriesEnabled: false
+    categoriesEnabled: false,
+    otpEnabled: false
   };
 
   const activeProduct = useMemo(() => {
@@ -505,6 +544,20 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   }, [currentItem.productId, currentItem.name, unitPrice]);
 
   useEffect(() => {
+    if (!otpCooldownUntil) {
+      setOtpCooldownRemaining(0);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((otpCooldownUntil - Date.now()) / 1000));
+      setOtpCooldownRemaining(remaining);
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [otpCooldownUntil]);
+
+  useEffect(() => {
     if (!lightboxSrc) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setLightboxSrc(null);
@@ -576,8 +629,9 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
       address: String(formData.get("address") || "").trim(),
       city: String(formData.get("city") || "").trim(),
       area: String(formData.get("area") || "").trim(),
-      note: String(formData.get("note") || "").trim(),
-      transactionId: String(formData.get("transactionId") || "").trim(),
+        note: String(formData.get("note") || "").trim(),
+        transactionId: String(formData.get("transactionId") || "").trim(),
+        otpToken,
       quantity,
       giftWrap,
       cod,
@@ -596,16 +650,21 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     const phoneOk = /^01[3-9]\d{8}$/.test(payload.phone);
     const allOptionsSelected = cart.length ? true : optionGroups.every((group) => !!selectedOptions[group.id]);
 
-    if (!payload.name || !payload.email || !payload.phone) {
-      setError(t.requiredFieldsError);
-      setLoading(false);
-      return;
-    }
-    if (!phoneOk) {
-      setError(t.invalidPhoneError);
-      setLoading(false);
-      return;
-    }
+      if (!payload.name || !payload.email || !payload.phone) {
+        setError(t.requiredFieldsError);
+        setLoading(false);
+        return;
+      }
+      if (!phoneOk) {
+        setError(t.invalidPhoneError);
+        setLoading(false);
+        return;
+      }
+      if (featureFlags.otpEnabled && !otpToken) {
+        setError(t.otpRequired);
+        setLoading(false);
+        return;
+      }
     if (!allOptionsSelected) {
       setError(t.optionsRequiredError);
       setLoading(false);
@@ -667,6 +726,12 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
         setLoading(false);
         return;
       }
+      const txnRegex = /^[A-Z0-9]{8,20}$/i;
+      if (!txnRegex.test(payload.transactionId)) {
+        setError(t.manualTxnFormatError);
+        setLoading(false);
+        return;
+      }
       const manualForm = new FormData();
       manualForm.append("paymentProof", proof);
       manualForm.append("payload", JSON.stringify({ ...payload, total }));
@@ -694,6 +759,57 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     }
     const data = (await response.json()) as { url?: string };
     if (data.url) window.location.href = data.url;
+  };
+
+  const handleOtpRequest = async () => {
+    setOtpStatus(null);
+    setOtpLoading(true);
+    try {
+      const response = await fetch("/api/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phoneInput })
+      });
+      const data = (await response.json()) as { otpId?: string; code?: string; error?: string; blockedUntil?: string };
+      if (!response.ok || !data.otpId) {
+        if (data.blockedUntil) {
+          setOtpCooldownUntil(new Date(data.blockedUntil).getTime());
+        }
+        setOtpStatus(data.error || t.otpInvalid);
+      } else {
+        setOtpId(data.otpId);
+        const cooldown = (displayConfig.otpSettings?.cooldownSec ?? 60) * 1000;
+        setOtpCooldownUntil(Date.now() + cooldown);
+        setOtpStatus(t.otpSent + (data.code ? ` (${data.code})` : ""));
+      }
+    } catch {
+      setOtpStatus(t.otpInvalid);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleOtpVerify = async () => {
+    setOtpStatus(null);
+    setOtpLoading(true);
+    try {
+      const response = await fetch("/api/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phoneInput, otpId, code: otpCode })
+      });
+      const data = (await response.json()) as { otpToken?: string; error?: string };
+      if (!response.ok || !data.otpToken) {
+        setOtpStatus(data.error || t.otpInvalid);
+      } else {
+        setOtpToken(data.otpToken);
+        setOtpStatus(t.otpVerified);
+      }
+    } catch {
+      setOtpStatus(t.otpInvalid);
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const localizedReviews: Review[] = useMemo(() => {
@@ -916,12 +1032,63 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                   <div className="grid gap-4 md:grid-cols-2">
                     <input name="name" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formName} required />
                     <input name="email" type="email" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formEmail} required />
-                    <input name="phone" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formPhone} required />
+                      <input
+                        name="phone"
+                        className="rounded-xl border border-slate-200 px-4 py-3"
+                        placeholder={t.formPhone}
+                        required
+                        onChange={(e) => {
+                          setPhoneInput(e.target.value);
+                          setOtpToken("");
+                          setOtpStatus(null);
+                        }}
+                      />
                     <input name="address" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formAddress} required />
                     <input name="city" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formCity} required />
                     <input name="area" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formArea} />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
+                    {featureFlags.otpEnabled && (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                        <div className="text-sm font-semibold text-slate-700">{t.otpTitle}</div>
+                        <div className="text-xs text-slate-500">{t.otpNote}</div>
+                        <div className="flex flex-wrap gap-3 items-center">
+                          <button
+                            type="button"
+                            onClick={handleOtpRequest}
+                            disabled={otpLoading || !phoneInput || otpCooldownRemaining > 0}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold"
+                          >
+                            {otpLoading ? "..." : t.otpSend}
+                          </button>
+                          <input
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value)}
+                            placeholder={t.otpCode}
+                            className="rounded-xl border border-slate-200 px-4 py-2 text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleOtpVerify}
+                            disabled={otpLoading || !otpId || !otpCode}
+                            className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700"
+                          >
+                            {otpLoading ? "..." : t.otpVerify}
+                          </button>
+                          {otpToken && (
+                            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                              {t.otpVerified}
+                            </span>
+                          )}
+                        </div>
+                        {otpStatus && <div className="text-xs text-slate-600">{otpStatus}</div>}
+                        {otpCooldownRemaining > 0 && (
+                          <div className="text-xs text-slate-500">
+                            Resend in {otpCooldownRemaining}s.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="grid gap-4 md:grid-cols-2">
                     <input
                       type="number"
                       min={1}
@@ -1178,7 +1345,10 @@ return (
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async ({ res }) => {
+  if (res) {
+    res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
+  }
   const config = await getConfig();
   return { props: { config } };
 };

@@ -1,6 +1,7 @@
 ﻿import fs from "fs";
 import path from "path";
 import { getPool } from "./db";
+import { nanoid } from "nanoid";
 import type { SiteConfig } from "./siteConfig";
 
 export type AuditEntry = {
@@ -38,9 +39,10 @@ export async function appendAudit(entry: Omit<AuditEntry, "id" | "createdAt" | "
   const createdAt = new Date().toISOString();
   if (pool) {
     try {
+      const id = nanoid();
       await pool.query(
-        "insert into site_config_audit (config_id, created_at, actor, role, ip, note, data) values ($1, $2, $3, $4, $5, $6, $7)",
-        [configId, createdAt, entry.actor || null, entry.role || null, entry.ip || null, entry.note || null, entry.data]
+        "insert into site_config_audit (id, config_id, created_at, actor, role, ip, note, data) values ($1, $2, $3, $4, $5, $6, $7, $8)",
+        [id, configId, createdAt, entry.actor || null, entry.role || null, entry.ip || null, entry.note || null, entry.data]
       );
       return;
     } catch (error) {

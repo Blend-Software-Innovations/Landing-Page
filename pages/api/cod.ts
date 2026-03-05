@@ -5,8 +5,18 @@ import { reserveInventory, releaseInventory } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
 import { createOrder } from "../../lib/orders";
+import { getConfig } from "../../lib/siteConfig.server";
+import { validateOtpToken } from "../../lib/otp";
 
 const dataPath = path.join(process.cwd(), "data", "cod.jsonl");
+
+function normalizePhone(input: string) {
+  const digits = input.replace(/\D/g, "");
+  if (digits.startsWith("8801")) return `+${digits}`;
+  if (digits.startsWith("01")) return `+88${digits}`;
+  if (digits.startsWith("880")) return `+${digits}`;
+  return input;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -19,6 +29,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const payload = req.body || {};
+  const otpToken = String(payload.otpToken || "");
+  const config = await getConfig();
+  if (config.features?.otpEnabled) {
+    const normalizedPhone = normalizePhone(String(payload.phone || ""));
+    if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
+      return res.status(401).json({ error: "OTP verification required" });
+    }
+  }
   const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
   const items = itemsRaw.length
     ? itemsRaw.map((item: any) => ({

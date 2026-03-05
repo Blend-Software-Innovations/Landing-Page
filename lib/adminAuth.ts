@@ -4,6 +4,45 @@ import { env } from "./env";
 import { findUserById } from "./auth";
 
 export type AdminRole = "owner" | "admin" | "staff" | "none";
+export type AdminPermission =
+  | "config:read"
+  | "config:write"
+  | "media:read"
+  | "media:write"
+  | "orders:read"
+  | "orders:write"
+  | "inventory:read"
+  | "inventory:write"
+  | "analytics:read"
+  | "audit:read";
+
+const rolePermissions: Record<Exclude<AdminRole, "none">, AdminPermission[]> = {
+  owner: [
+    "config:read",
+    "config:write",
+    "media:read",
+    "media:write",
+    "orders:read",
+    "orders:write",
+    "inventory:read",
+    "inventory:write",
+    "analytics:read",
+    "audit:read"
+  ],
+  admin: [
+    "config:read",
+    "config:write",
+    "media:read",
+    "media:write",
+    "orders:read",
+    "orders:write",
+    "inventory:read",
+    "inventory:write",
+    "analytics:read",
+    "audit:read"
+  ],
+  staff: ["config:read", "media:read", "orders:read", "inventory:read", "analytics:read", "audit:read"]
+};
 
 const encoder = new TextEncoder();
 const accessSecret = encoder.encode(env.AUTH_JWT_SECRET);
@@ -47,4 +86,9 @@ export function canRead(role: AdminRole) {
 
 export function canWrite(role: AdminRole) {
   return role === "owner" || role === "admin";
+}
+
+export function hasPermission(role: AdminRole, permission: AdminPermission) {
+  if (role === "none") return false;
+  return rolePermissions[role]?.includes(permission);
 }

@@ -3,9 +3,19 @@ import Stripe from "stripe";
 import { reserveInventory, releaseInventory } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
+import { getConfig } from "../../lib/siteConfig.server";
+import { validateOtpToken } from "../../lib/otp";
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-01-28.clover" }) : null;
+
+function normalizePhone(input: string) {
+  const digits = input.replace(/\D/g, "");
+  if (digits.startsWith("8801")) return `+${digits}`;
+  if (digits.startsWith("01")) return `+88${digits}`;
+  if (digits.startsWith("880")) return `+${digits}`;
+  return input;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -29,6 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const name = String(body.name || "");
   const email = String(body.email || "");
   const phone = String(body.phone || "");
+  const otpToken = String(body.otpToken || "");
   const giftWrapFee = Number(body.giftWrapFee || 0);
   const shippingFee = Number(body.shippingFee || 0);
   const discount = Number(body.discount || 0);
@@ -39,6 +50,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     (req.headers.origin ? String(req.headers.origin) : "http://localhost:3000");
 
   try {
+    const config = await getConfig();
+    if (config.features?.otpEnabled) {
+      const normalizedPhone = normalizePhone(phone);
+      if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
+        return res.status(401).json({ error: "OTP verification required" });
+      }
+    }
     const items = itemsRaw.length
       ? itemsRaw.map((item) => ({
           name: String(item.name || "Custom item"),

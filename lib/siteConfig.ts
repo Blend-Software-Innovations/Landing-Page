@@ -122,12 +122,18 @@ export type SiteConfig = {
     nagad: string;
   };
   experiments?: Experiment[];
-  features: {
-    inventoryEnabled: boolean;
-    variantImagesEnabled: boolean;
-    multiProductEnabled: boolean;
-    categoriesEnabled: boolean;
-  };
+    features: {
+      inventoryEnabled: boolean;
+      variantImagesEnabled: boolean;
+      multiProductEnabled: boolean;
+      categoriesEnabled: boolean;
+      otpEnabled: boolean;
+    };
+    otpSettings: {
+      cooldownSec: number;
+      lockoutAttempts: number;
+      lockoutMin: number;
+    };
   activeProductId: string;
   products: Array<{
     id: string;
@@ -376,7 +382,13 @@ export const defaultConfig: SiteConfig = {
     inventoryEnabled: false,
     variantImagesEnabled: false,
     multiProductEnabled: false,
-    categoriesEnabled: false
+    categoriesEnabled: false,
+    otpEnabled: false
+  },
+  otpSettings: {
+    cooldownSec: 60,
+    lockoutAttempts: 5,
+    lockoutMin: 10
   },
   activeProductId: "default-product",
   products: [

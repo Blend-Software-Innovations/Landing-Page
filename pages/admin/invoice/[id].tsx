@@ -54,6 +54,14 @@ export default function Invoice({ order }: { order: any }) {
           >
             Print
           </button>
+          <a
+            href={`/api/admin/invoice-pdf?id=${order.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+          >
+            Download PDF
+          </a>
         </div>
 
         <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -97,6 +105,23 @@ export default function Invoice({ order }: { order: any }) {
         <div className="mt-6 flex items-center justify-between text-sm">
           <span className="text-slate-500">Subtotal: BDT {subtotal}</span>
           <span className="font-semibold text-slate-900">Total: BDT {order.total}</span>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2 text-xs text-slate-600">
+          {[
+            { label: "Placed", value: order.createdAt },
+            { label: "Confirmed", value: order.confirmedAt },
+            { label: "Packed", value: order.packedAt },
+            { label: "Shipped", value: order.shippedAt },
+            { label: "Delivered", value: order.deliveredAt },
+            { label: "Canceled", value: order.canceledAt },
+            { label: "Returned", value: order.returnedAt }
+          ]
+            .filter((item) => item.value)
+            .map((item) => (
+              <span key={item.label} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                {item.label}: {new Date(item.value).toLocaleString()}
+              </span>
+            ))}
         </div>
       </div>
     </div>
