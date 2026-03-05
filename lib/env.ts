@@ -26,7 +26,16 @@ const envSchema = z.object({
   TWILIO_PHONE: z.string().optional()
 });
 
-export const env = envSchema.parse(process.env);
+const buildPhase =
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.NEXT_PHASE === "phase-export";
+
+const relaxedSchema = envSchema.extend({
+  AUTH_JWT_SECRET: z.string().min(16).optional(),
+  AUTH_REFRESH_SECRET: z.string().min(16).optional()
+});
+
+export const env = (buildPhase ? relaxedSchema : envSchema).parse(process.env);
 
 export const authAllowlist = (env.AUTH_ALLOWLIST_ORIGINS || "")
   .split(",")
