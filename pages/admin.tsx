@@ -89,6 +89,7 @@ export default function AdminDashboard() {
   const [otpMetrics, setOtpMetrics] = useState<Array<{ phone: string; lastRequested?: string; attempts: number; pending: number; cooldownUntil?: string; lockedUntil?: string }>>([]);
   const [otpSearch, setOtpSearch] = useState("");
   const [holds, setHolds] = useState<any[]>([]);
+  const [partnerInput, setPartnerInput] = useState("");
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   const canWrite = role === "admin" || role === "owner";
@@ -608,6 +609,49 @@ export default function AdminDashboard() {
             value={String(config.freeDeliveryThresholdQty)}
             onChange={(v) => updateConfig({ ...config, freeDeliveryThresholdQty: Number(v || 0) })}
           />
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="text-sm font-semibold text-slate-700">Delivery partners (shown for COD)</div>
+            <div className="flex flex-wrap gap-2">
+              {(config.deliveryPartners || []).map((partner) => (
+                <span key={partner} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                  {partner}
+                  <button
+                    type="button"
+                    className="text-rose-500"
+                    onClick={() => {
+                      const next = (config.deliveryPartners || []).filter((item) => item !== partner);
+                      updateConfig({ ...config, deliveryPartners: next });
+                    }}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={partnerInput}
+                onChange={(e) => setPartnerInput(e.target.value)}
+                placeholder="Add partner (e.g., Pathao)"
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm"
+              />
+              <button
+                type="button"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  const value = partnerInput.trim();
+                  if (!value) return;
+                  const current = config.deliveryPartners || [];
+                  if (!current.includes(value)) {
+                    updateConfig({ ...config, deliveryPartners: [...current, value] });
+                  }
+                  setPartnerInput("");
+                }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
         </Section>
 
         <Section title="Options" hint="Option groups appear in the order form.">
@@ -1198,6 +1242,24 @@ export default function AdminDashboard() {
                         className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
                         disabled={!canManageOrders}
                       />
+                      <select
+                        value={order.shippingPartner || ""}
+                        onChange={(e) => {
+                          const next = orders.map((item) =>
+                            item.id === order.id ? { ...item, shippingPartner: e.target.value } : item
+                          );
+                          setOrders(next);
+                        }}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                        disabled={!canManageOrders}
+                      >
+                        <option value="">Courier</option>
+                        {(config?.deliveryPartners || []).map((partner) => (
+                          <option key={partner} value={partner}>
+                            {partner}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         type="button"
                         onClick={async () => {
@@ -1205,7 +1267,11 @@ export default function AdminDashboard() {
                           await fetch("/api/admin/order-tracking", {
                             method: "POST",
                             headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-                            body: JSON.stringify({ orderId: order.id, trackingCode: order.trackingCode || "" })
+                            body: JSON.stringify({
+                              orderId: order.id,
+                              trackingCode: order.trackingCode || "",
+                              shippingPartner: order.shippingPartner || ""
+                            })
                           });
                           loadOrders();
                         }}

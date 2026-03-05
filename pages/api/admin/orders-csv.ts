@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ? orders.filter((order: any) => order.status === statusFilter)
     : orders;
 
-  const header = ["OrderId", "Name", "Phone", "Address", "City", "Area", "CODAmount", "Notes", "Items", "Status", "TrackingCode"];
+  const header = ["OrderId", "Name", "Phone", "Address", "City", "Area", "CODAmount", "Notes", "Items", "Status", "TrackingCode", "Courier"];
   const rows: string[][] = filtered.map((order: any) => {
     const items = (order.items || [])
       .map((item: any) => `${item.productId}${item.variantId ? `(${item.variantId})` : ""} x${item.quantity}`)
@@ -46,7 +46,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "",
       items,
       order.status,
-      order.trackingCode || ""
+      order.trackingCode || "",
+      order.shippingPartner || ""
     ].map((value) => csvEscape(String(value)));
   });
 

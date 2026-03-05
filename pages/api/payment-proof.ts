@@ -4,7 +4,7 @@ import os from "os";
 import fs from "fs";
 import path from "path";
 import { uploadImage } from "../../lib/uploads";
-import { reserveInventory, releaseInventory } from "../../lib/inventory";
+import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { createOrder } from "../../lib/orders";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
@@ -85,9 +85,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           ];
 
       const reservationIds: string[] = [];
+      const resolvedItems = [];
       for (const item of items) {
-        if (!item.variantId) continue;
-        const reservationId = await reserveInventory(item.variantId, item.quantity);
+        if (!item.variantId) {
+          resolvedItems.push(item);
+          continue;
+        }
+        const resolvedId = await resolveInventoryVariantId(item.variantId);
+        if (!resolvedId) {
+          return res.status(409).json({ error: "Insufficient stock" });
+        }
+        const reservationId = await reserveInventory(resolvedId, item.quantity);
         if (!reservationId) {
           for (const id of reservationIds) {
             await releaseInventory(id);
@@ -95,6 +103,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           return res.status(409).json({ error: "Insufficient stock" });
         }
         reservationIds.push(reservationId);
+        resolvedItems.push({ ...item, variantId: resolvedId });
       }
       const upload = await uploadImage(file.filepath, file.originalFilename || "payment-proof.jpg", "public");
       const record = { ...payload, reservationIds, proofUrl: upload.url, createdAt: new Date().toISOString() };
@@ -108,6 +117,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         paymentMethod: "MANUAL",
         paymentStatus: "PARTIAL",
         transactionId: txnId || undefined,
+        shippingPartner: payload.shippingPartner || undefined,
         manualStatus: "PENDING",
         manualProofUrl: upload.url,
         manualSubmittedAt: new Date().toISOString(),
@@ -116,7 +126,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         quantity: Number(payload.quantity || 1),
         unitPrice: Math.round(Number(payload.total || 0) / Math.max(1, Number(payload.quantity || 1))),
         reservationIds,
-        items,
+        items: resolvedItems,
         status: "PENDING"
       });
       await writeOrderAudit({

@@ -1,6 +1,6 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
-import { reserveInventory, releaseInventory } from "../../lib/inventory";
+import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
 import { getConfig } from "../../lib/siteConfig.server";
@@ -44,6 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const shippingFee = Number(body.shippingFee || 0);
   const discount = Number(body.discount || 0);
   const itemsRaw = Array.isArray(body.items) ? (body.items as Array<Record<string, unknown>>) : [];
+  const shippingPartner = String(body.shippingPartner || "");
 
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -78,7 +79,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const reservationIds: string[] = [];
     for (const item of items) {
       if (!item.variantId) continue;
-      const reservationId = await reserveInventory(item.variantId, item.quantity);
+      const resolvedId = await resolveInventoryVariantId(item.variantId);
+      if (!resolvedId) {
+        return res.status(409).json({ error: "Insufficient stock" });
+      }
+      const reservationId = await reserveInventory(resolvedId, item.quantity);
       if (!reservationId) {
         for (const id of reservationIds) {
           await releaseInventory(id);
@@ -152,6 +157,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         quantity: String(quantity),
         giftWrap: String(body.giftWrap || false),
         deliveryZone: String(body.deliveryZone || ""),
+        shippingPartner,
         selectedOptions: JSON.stringify(body.selectedOptions || {}),
         cart: JSON.stringify(items),
         discount: String(discount || 0),

@@ -24,7 +24,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     trackingCode?: string;
     shippingPartner?: string;
   };
-  if (!orderId || !trackingCode) return res.status(400).json({ error: "Missing data" });
+  if (!orderId || (!trackingCode && !shippingPartner)) {
+    return res.status(400).json({ error: "Missing data" });
+  }
   const order = await updateOrderTracking(orderId, trackingCode, shippingPartner, session);
   return res.status(200).json({ order });
 }

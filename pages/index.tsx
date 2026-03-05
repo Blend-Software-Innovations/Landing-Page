@@ -66,6 +66,8 @@ type UiCopy = {
   formArea: string;
   codLabel: string;
   codNote: string;
+  courierLabel: string;
+  courierRequired: string;
   orderSummary: string;
   summarySubtotal: string;
   summaryGiftWrap: string;
@@ -138,6 +140,8 @@ const ui: Record<Lang, UiCopy> = {
     formArea: "Area",
     codLabel: "Cash on delivery",
     codNote: "We will call to confirm your order.",
+    courierLabel: "Select delivery partner",
+    courierRequired: "Please select a courier partner for COD.",
     orderSummary: "Order summary",
     summarySubtotal: "Subtotal",
     summaryGiftWrap: "Gift wrap",
@@ -208,6 +212,8 @@ const ui: Record<Lang, UiCopy> = {
     formArea: "থানা/এলাকা",
     codLabel: "ক্যাশ অন ডেলিভারি",
     codNote: "অর্ডার কনফার্মের জন্য আমরা কল করবো।",
+    courierLabel: "ডেলিভারি পার্টনার নির্বাচন করুন",
+    courierRequired: "COD এর জন্য ডেলিভারি পার্টনার নির্বাচন করুন।",
     orderSummary: "অর্ডার সারাংশ",
     summarySubtotal: "সাবটোটাল",
     summaryGiftWrap: "গিফট র‍্যাপ",
@@ -376,6 +382,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
   const [otpCooldownRemaining, setOtpCooldownRemaining] = useState(0);
   const [deliveryZone, setDeliveryZone] = useState<"insideDhaka" | "outsideDhaka">("insideDhaka");
+  const [courierPartner, setCourierPartner] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -437,6 +444,15 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     };
   }, [config, abVariant]);
 
+  useEffect(() => {
+    const partners = displayConfig.deliveryPartners || [];
+    if (!partners.length) {
+      setCourierPartner("");
+      return;
+    }
+    setCourierPartner((current) => (current && partners.includes(current) ? current : partners[0]));
+  }, [displayConfig.deliveryPartners]);
+
   const featureFlags = displayConfig.features || {
     inventoryEnabled: false,
     variantImagesEnabled: false,
@@ -495,7 +511,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     id: currentItemId,
     name: activeProduct?.name || displayConfig.productCardTitle.en,
     productId: selectedProductId || activeProduct?.id || "",
-    variantId: selectedVariant?.id || "",
+    variantId: selectedVariant?.sku || "",
     optionValues: { ...selectedOptions },
     quantity,
     unitPrice
@@ -635,11 +651,12 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
       quantity,
       giftWrap,
       cod,
+      shippingPartner: courierPartner,
       deliveryZone,
       paymentMethod,
       productId: featureFlags.multiProductEnabled ? (selectedProductId || activeProduct?.id || "") : "",
       selectedOptions,
-      variantId: selectedVariant?.id || "",
+      variantId: selectedVariant?.sku || "",
       items: itemsForCheckout,
       unitPrice,
       giftWrapFee,
@@ -662,6 +679,11 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
       }
       if (featureFlags.otpEnabled && !otpToken) {
         setError(t.otpRequired);
+        setLoading(false);
+        return;
+      }
+      if (cod && (displayConfig.deliveryPartners || []).length && !courierPartner) {
+        setError(t.courierRequired);
         setLoading(false);
         return;
       }
@@ -704,7 +726,8 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
         body: JSON.stringify({ ...payload, total })
       });
       if (!response.ok) {
-        setError(t.codFailure);
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        setError(data.error || t.codFailure);
       } else {
         setSuccess(t.codSuccess);
         setCart([]);
@@ -1146,6 +1169,22 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                       <input type="checkbox" checked={cod} onChange={(e) => setCod(e.target.checked)} /> {t.codLabel}
                     </label>
                     <div className="mt-2 text-xs text-slate-500">{t.codNote}</div>
+                    {cod && (displayConfig.deliveryPartners || []).length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <div className="text-xs font-semibold text-slate-700">{t.courierLabel}</div>
+                        <select
+                          value={courierPartner}
+                          onChange={(e) => setCourierPartner(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                        >
+                          {(displayConfig.deliveryPartners || []).map((partner) => (
+                            <option key={partner} value={partner}>
+                              {partner}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="mt-4 text-sm font-semibold">{t.paymentStripe}</div>
                     <div className="text-xs text-slate-500">{t.paymentManual}</div>
                     <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">

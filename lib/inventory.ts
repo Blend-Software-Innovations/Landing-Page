@@ -4,6 +4,15 @@ import { getPrisma } from "./prisma";
 const HOLD_TTL_MINUTES = 15;
 const ORDER_HOLD_TTL_HOURS = 72;
 
+async function resolveVariantId(variantIdOrSku: string) {
+  if (!variantIdOrSku) return null;
+  const prisma = getPrisma() as any;
+  const byId = await prisma.variant.findUnique({ where: { id: variantIdOrSku } });
+  if (byId?.id) return byId.id;
+  const bySku = await prisma.variant.findUnique({ where: { sku: variantIdOrSku } });
+  return bySku?.id || null;
+}
+
 export async function releaseExpiredHolds() {
   const prisma = getPrisma() as any;
   const now = new Date();
@@ -29,19 +38,22 @@ export async function reserveInventory(variantId: string, quantity: number) {
   const prisma = getPrisma() as any;
   await releaseExpiredHolds();
 
+  const resolvedId = await resolveVariantId(variantId);
+  if (!resolvedId) return null;
+
   const reservationId = nanoid();
   const expiresAt = new Date(Date.now() + HOLD_TTL_MINUTES * 60 * 1000);
 
   const updated = await prisma.$transaction(async (tx: any) => {
     const result = await tx.variant.updateMany({
-      where: { id: variantId, stockQty: { gte: quantity } },
+      where: { id: resolvedId, stockQty: { gte: quantity } },
       data: { stockQty: { decrement: quantity } }
     });
     if (result.count === 0) return null;
     await tx.inventoryHold.create({
       data: {
         id: reservationId,
-        variantId,
+        variantId: resolvedId,
         quantity,
         expiresAt
       }
@@ -50,6 +62,10 @@ export async function reserveInventory(variantId: string, quantity: number) {
   });
 
   return updated;
+}
+
+export async function resolveInventoryVariantId(variantIdOrSku: string) {
+  return resolveVariantId(variantIdOrSku);
 }
 
 export async function extendHoldForOrder(reservationId: string) {

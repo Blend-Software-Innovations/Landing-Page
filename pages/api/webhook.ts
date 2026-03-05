@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import fs from "fs";
 import path from "path";
 import twilio from "twilio";
-import { commitInventory } from "../../lib/inventory";
+import { commitInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { createOrder } from "../../lib/orders";
 import { isRateLimited } from "../../lib/rateLimit";
 import { publicRateLimitPerMin } from "../../lib/env";
@@ -79,17 +79,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
     const itemsPayload = cartItems.length
-      ? cartItems.map((item) => ({
-          productId: String(item.productId || ""),
-          variantId: String(item.variantId || ""),
-          quantity: Number(item.quantity || 1),
-          unitPrice: Number(item.unitPrice || 0),
-          lineTotal: Number(item.unitPrice || 0) * Number(item.quantity || 1)
-        }))
+      ? await Promise.all(
+          cartItems.map(async (item) => ({
+            productId: String(item.productId || ""),
+            variantId: (await resolveInventoryVariantId(String(item.variantId || ""))) || "",
+            quantity: Number(item.quantity || 1),
+            unitPrice: Number(item.unitPrice || 0),
+            lineTotal: Number(item.unitPrice || 0) * Number(item.quantity || 1)
+          }))
+        )
       : [
           {
             productId: meta.productId || "",
-            variantId: meta.variantId || "",
+            variantId: (await resolveInventoryVariantId(String(meta.variantId || ""))) || "",
             quantity: Number(meta.quantity || 1),
             unitPrice: Number(meta.unitPrice || 0),
             lineTotal: Number(meta.unitPrice || 0) * Number(meta.quantity || 1)
@@ -105,6 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       paymentMethod: "STRIPE",
       paymentStatus: "PAID",
       transactionId: session.payment_intent ? String(session.payment_intent) : undefined,
+      shippingPartner: meta.shippingPartner || undefined,
       productId: meta.productId || "",
       variantId: meta.variantId || "",
       quantity: Number(meta.quantity || 1),

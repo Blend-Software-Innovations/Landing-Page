@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { getPool } from "./db";
 import { appendAudit } from "./audit";
+import { getPrisma } from "./prisma";
 
 const dataPath = path.join(process.cwd(), "data", "site.json");
 const configId = process.env.CONFIG_ID || "default";
@@ -69,6 +70,57 @@ export async function saveConfig(
         "insert into site_config (id, data, updated_at) values ($1, $2, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
         [configId, config]
       );
+      if (config.features?.inventoryEnabled && config.variants?.length) {
+        try {
+          const prisma = getPrisma() as any;
+          const baseName = config.productCardTitle?.en || config.brandName || "Landing Product";
+          const product = await prisma.product.upsert({
+            where: { sku: "LANDING-DEFAULT" },
+            update: {
+              name: baseName,
+              brand: config.brandName || "Brand",
+              category: config.products?.[0]?.category || "General",
+              basePrice: config.priceBdt || 0,
+              description: config.productBody?.en || ""
+            },
+            create: {
+              name: baseName,
+              brand: config.brandName || "Brand",
+              category: config.products?.[0]?.category || "General",
+              sku: "LANDING-DEFAULT",
+              basePrice: config.priceBdt || 0,
+              description: config.productBody?.en || "",
+              type: "PHYSICAL"
+            }
+          });
+          for (const variant of config.variants) {
+            if (!variant.sku) continue;
+            const optionName = Object.values(variant.optionValues || {}).join(" / ") || "Variant";
+            await prisma.variant.upsert({
+              where: { sku: variant.sku },
+              update: {
+                productId: product.id,
+                name: optionName,
+                price: variant.price,
+                stockQty: variant.stockQty,
+                weight: variant.weight || null,
+                imageUrl: variant.images?.[0] || null
+              },
+              create: {
+                productId: product.id,
+                name: optionName,
+                price: variant.price,
+                stockQty: variant.stockQty,
+                weight: variant.weight || null,
+                sku: variant.sku,
+                imageUrl: variant.images?.[0] || null
+              }
+            });
+          }
+        } catch (error) {
+          console.error("Failed to sync variants to database", error);
+        }
+      }
       return;
     } catch (error) {
       console.error("Failed to save config to database", error);

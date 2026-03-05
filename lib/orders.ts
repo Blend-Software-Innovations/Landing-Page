@@ -19,6 +19,7 @@ export type OrderPayload = {
   manualSubmittedAt?: string;
   manualReviewedAt?: string;
   manualReviewNote?: string;
+  shippingPartner?: string;
   productId?: string;
   variantId?: string;
   quantity: number;
@@ -101,6 +102,7 @@ export async function createOrder(payload: OrderPayload) {
       manualSubmittedAt: payload.manualSubmittedAt ? new Date(payload.manualSubmittedAt) : null,
       manualReviewedAt: payload.manualReviewedAt ? new Date(payload.manualReviewedAt) : null,
       manualReviewNote: payload.manualReviewNote || null,
+      shippingPartner: payload.shippingPartner || null,
       reservationId: payload.reservationId || null,
       reservationIds: payload.reservationIds?.length ? payload.reservationIds : null,
       items: {
@@ -203,14 +205,18 @@ export async function listOrders(limit = 50) {
 
 export async function updateOrderTracking(
   orderId: string,
-  trackingCode: string,
+  trackingCode?: string,
   shippingPartner?: string,
   meta?: { actor?: string; role?: string }
 ) {
   const prisma = getPrisma() as any;
+  const data: Record<string, any> = {};
+  if (trackingCode !== undefined) data.trackingCode = trackingCode;
+  if (shippingPartner !== undefined) data.shippingPartner = shippingPartner || null;
+  if (!Object.keys(data).length) return null;
   const order = await prisma.order.update({
     where: { id: orderId },
-    data: { trackingCode, shippingPartner: shippingPartner || null }
+    data
   });
   await writeOrderAudit({
     orderId,

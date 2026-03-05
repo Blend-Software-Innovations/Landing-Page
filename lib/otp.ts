@@ -158,7 +158,7 @@ export function lockOtp(phone: string, minutes: number) {
   const next = items.filter((item) => item.phone !== phone);
   next.push({ phone, lockedUntil: until });
   writeJson(lockoutPath, next);
-  return { otpId: entry.id, code };
+  return { lockedUntil: until };
 }
 
 export function verifyOtp(

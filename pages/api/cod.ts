@@ -1,7 +1,7 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import fs from "fs";
 import path from "path";
-import { reserveInventory, releaseInventory } from "../../lib/inventory";
+import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
 import { createOrder } from "../../lib/orders";
@@ -57,9 +57,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ];
 
   const reservationIds: string[] = [];
+  const resolvedItems = [];
   for (const item of items) {
-    if (!item.variantId) continue;
-    const reservationId = await reserveInventory(item.variantId, item.quantity);
+    if (!item.variantId) {
+      resolvedItems.push(item);
+      continue;
+    }
+    const resolvedId = await resolveInventoryVariantId(item.variantId);
+    if (!resolvedId) {
+      return res.status(409).json({ error: "Insufficient stock" });
+    }
+    const reservationId = await reserveInventory(resolvedId, item.quantity);
     if (!reservationId) {
       for (const id of reservationIds) {
         await releaseInventory(id);
@@ -67,6 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(409).json({ error: "Insufficient stock" });
     }
     reservationIds.push(reservationId);
+    resolvedItems.push({ ...item, variantId: resolvedId });
   }
   const record = {
     ...payload,
@@ -83,12 +92,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     paymentMethod: "COD",
     paymentStatus: "UNPAID",
     transactionId: payload.transactionId || undefined,
+    shippingPartner: payload.shippingPartner || undefined,
     productId: payload.productId || "",
     variantId: payload.variantId || "",
     quantity: Number(payload.quantity || 1),
     unitPrice: Math.round(Number(payload.total || 0) / Math.max(1, Number(payload.quantity || 1))),
     reservationIds,
-    items,
+    items: resolvedItems,
     status: "PENDING"
   });
   fs.mkdirSync(path.dirname(dataPath), { recursive: true });
