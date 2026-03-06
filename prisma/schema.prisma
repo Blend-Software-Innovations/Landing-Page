@@ -132,6 +132,15 @@ model Order {
   reservationIds  Json?
   shippingPartner String?
   trackingCode    String?
+  paymentProvider String?
+  paymentLink     String?
+  paidAmount      Int?
+  deviceFingerprint String?
+  fraudFlags      Json?
+  fraudScore      Int           @default(0)
+  callStatus      String?
+  callNotes       String?
+  callVerifiedAt  DateTime?
   items           OrderItem[]
   confirmedAt     DateTime?
   packedAt        DateTime?

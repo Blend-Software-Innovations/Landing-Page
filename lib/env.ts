@@ -23,7 +23,14 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   TWILIO_SID: z.string().optional(),
   TWILIO_AUTH: z.string().optional(),
-  TWILIO_PHONE: z.string().optional()
+  TWILIO_PHONE: z.string().optional(),
+  STEADFAST_API_KEY: z.string().optional(),
+  STEADFAST_BASE_URL: z.string().optional(),
+  PATHAO_CLIENT_ID: z.string().optional(),
+  PATHAO_CLIENT_SECRET: z.string().optional(),
+  PATHAO_BASE_URL: z.string().optional(),
+  REDX_API_KEY: z.string().optional(),
+  REDX_BASE_URL: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);

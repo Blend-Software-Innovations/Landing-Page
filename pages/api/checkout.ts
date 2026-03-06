@@ -40,6 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const email = String(body.email || "");
   const phone = String(body.phone || "");
   const otpToken = String(body.otpToken || "");
+  const deviceFingerprint = String(body.deviceFingerprint || "");
   const giftWrapFee = Number(body.giftWrapFee || 0);
   const shippingFee = Number(body.shippingFee || 0);
   const discount = Number(body.discount || 0);
@@ -157,6 +158,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         quantity: String(quantity),
         giftWrap: String(body.giftWrap || false),
         deliveryZone: String(body.deliveryZone || ""),
+        deviceFingerprint,
         shippingPartner,
         selectedOptions: JSON.stringify(body.selectedOptions || {}),
         cart: JSON.stringify(items),

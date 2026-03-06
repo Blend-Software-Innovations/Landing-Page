@@ -5,12 +5,13 @@ import fs from "fs";
 import path from "path";
 import { uploadImage } from "../../lib/uploads";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
-import { createOrder } from "../../lib/orders";
+import { createOrder, updateOrderStatus } from "../../lib/orders";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
-import { writeOrderAudit } from "../../lib/notifications";
+import { notifyManualPaymentReview, writeOrderAudit } from "../../lib/notifications";
 import { getConfig } from "../../lib/siteConfig.server";
 import { validateOtpToken } from "../../lib/otp";
+import { detectFraud } from "../../lib/fraud";
 
 export const config = {
   api: { bodyParser: false }
@@ -61,6 +62,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         }
       }
       const txnId = String(payload.transactionId || "").trim();
+      const paidAmount = Number(payload.paidAmount || 0);
+      const total = Number(payload.total || 0);
       const txnRegex = /^[A-Z0-9]{8,20}$/i;
       if (!txnId || !txnRegex.test(txnId)) {
         return res.status(400).json({ error: "Invalid transaction ID" });
@@ -107,32 +110,62 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       }
       const upload = await uploadImage(file.filepath, file.originalFilename || "payment-proof.jpg", "public");
       const record = { ...payload, reservationIds, proofUrl: upload.url, createdAt: new Date().toISOString() };
+      const fraud = await detectFraud({
+        phone: payload.phone || "",
+        deviceFingerprint: payload.deviceFingerprint || "",
+        transactionId: txnId
+      });
+      const duplicateTxn = fraud.flags.includes("txn_duplicate");
+      const amountMatch = paidAmount > 0 && total > 0 && paidAmount === total;
+      const manualStatus = duplicateTxn ? "REJECTED" : amountMatch ? "VERIFIED" : "PENDING";
+      const manualReviewedAt = manualStatus === "PENDING" ? null : new Date().toISOString();
+      const manualReviewNote = duplicateTxn
+        ? "Duplicate transaction ID"
+        : amountMatch
+        ? "Auto-verified by amount match"
+        : null;
+      const paymentStatus = manualStatus === "VERIFIED" ? "PAID" : manualStatus === "REJECTED" ? "UNPAID" : "PARTIAL";
       const order = await createOrder({
         customerName: payload.name || "",
         phone: payload.phone || "",
         address: payload.address || "",
         city: payload.city || "",
         area: payload.area || "",
-        total: Number(payload.total || 0),
+        total,
         paymentMethod: "MANUAL",
-        paymentStatus: "PARTIAL",
+        paymentStatus,
         transactionId: txnId || undefined,
         shippingPartner: payload.shippingPartner || undefined,
-        manualStatus: "PENDING",
+        manualStatus,
         manualProofUrl: upload.url,
         manualSubmittedAt: new Date().toISOString(),
+        manualReviewedAt: manualReviewedAt || undefined,
+        manualReviewNote: manualReviewNote || undefined,
         productId: payload.productId || "",
         variantId: payload.variantId || "",
         quantity: Number(payload.quantity || 1),
-        unitPrice: Math.round(Number(payload.total || 0) / Math.max(1, Number(payload.quantity || 1))),
+        unitPrice: Math.round(total / Math.max(1, Number(payload.quantity || 1))),
         reservationIds,
         items: resolvedItems,
-        status: "PENDING"
+        status: "PENDING",
+        deviceFingerprint: payload.deviceFingerprint || undefined,
+        fraudFlags: fraud.flags,
+        fraudScore: fraud.score,
+        paidAmount: paidAmount || undefined
       });
+      if (manualStatus === "VERIFIED") {
+        await updateOrderStatus(order.id, "CONFIRMED", { role: "system" as any });
+      }
+      if (manualStatus === "REJECTED") {
+        await updateOrderStatus(order.id, "CANCELED", { role: "system" as any });
+      }
+      if (manualStatus === "VERIFIED" || manualStatus === "REJECTED") {
+        await notifyManualPaymentReview(order, manualStatus as "VERIFIED" | "REJECTED");
+      }
       await writeOrderAudit({
         orderId: order.id,
         action: "payment.manual.submitted",
-        data: { transactionId: txnId, proofUrl: upload.url }
+        data: { transactionId: txnId, proofUrl: upload.url, manualStatus }
       });
       fs.mkdirSync(path.dirname(dataPath), { recursive: true });
       fs.appendFileSync(dataPath, `${JSON.stringify(record)}\n`);

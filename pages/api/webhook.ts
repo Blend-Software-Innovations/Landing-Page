@@ -8,6 +8,7 @@ import { createOrder } from "../../lib/orders";
 import { isRateLimited } from "../../lib/rateLimit";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { requireDb } from "../../lib/db";
+import { detectFraud } from "../../lib/fraud";
 
 export const config = { api: { bodyParser: false } };
 
@@ -70,6 +71,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const id of reservationIds) {
       await commitInventory(id);
     }
+    const fraud = await detectFraud({
+      phone: meta.phone || "",
+      deviceFingerprint: meta.deviceFingerprint || "",
+      transactionId: session.payment_intent ? String(session.payment_intent) : ""
+    });
     let cartItems: Array<any> = [];
     if (meta.cart) {
       try {
@@ -108,6 +114,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       paymentStatus: "PAID",
       transactionId: session.payment_intent ? String(session.payment_intent) : undefined,
       shippingPartner: meta.shippingPartner || undefined,
+      deviceFingerprint: meta.deviceFingerprint || undefined,
+      fraudFlags: fraud.flags,
+      fraudScore: fraud.score,
       productId: meta.productId || "",
       variantId: meta.variantId || "",
       quantity: Number(meta.quantity || 1),

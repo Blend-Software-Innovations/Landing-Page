@@ -20,6 +20,12 @@ export type OrderPayload = {
   manualReviewedAt?: string;
   manualReviewNote?: string;
   shippingPartner?: string;
+  paymentProvider?: string;
+  paymentLink?: string;
+  deviceFingerprint?: string;
+  fraudFlags?: string[];
+  fraudScore?: number;
+  paidAmount?: number;
   productId?: string;
   variantId?: string;
   quantity: number;
@@ -103,6 +109,12 @@ export async function createOrder(payload: OrderPayload) {
       manualReviewedAt: payload.manualReviewedAt ? new Date(payload.manualReviewedAt) : null,
       manualReviewNote: payload.manualReviewNote || null,
       shippingPartner: payload.shippingPartner || null,
+      paymentProvider: payload.paymentProvider || null,
+      paymentLink: payload.paymentLink || null,
+      deviceFingerprint: payload.deviceFingerprint || null,
+      fraudFlags: payload.fraudFlags?.length ? payload.fraudFlags : null,
+      fraudScore: payload.fraudScore || 0,
+      paidAmount: payload.paidAmount || null,
       reservationId: payload.reservationId || null,
       reservationIds: payload.reservationIds?.length ? payload.reservationIds : null,
       items: {

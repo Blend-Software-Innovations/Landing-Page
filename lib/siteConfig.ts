@@ -94,6 +94,15 @@ export type SiteConfig = {
     insideDhaka: number;
     outsideDhaka: number;
   };
+  shippingRules: {
+    enabled: boolean;
+    unit: "g";
+    tiers: Array<{
+      maxWeight: number;
+      insideDhaka: number;
+      outsideDhaka: number;
+    }>;
+  };
   freeDeliveryThresholdQty: number;
   optionGroups: OptionGroup[];
   recommended: Record<string, string[]>;
@@ -113,6 +122,16 @@ export type SiteConfig = {
   gallery: GalleryItem[];
   signatureImage: string;
   deliveryPartners: string[];
+  paymentProviders: {
+    bkash: boolean;
+    nagad: boolean;
+    rocket: boolean;
+  };
+  paymentLinks: {
+    bkash: string;
+    nagad: string;
+    rocket: string;
+  };
   merchant: {
     bankName: string;
     accountName: string;
@@ -260,6 +279,15 @@ export const defaultConfig: SiteConfig = {
     insideDhaka: 0,
     outsideDhaka: 120
   },
+  shippingRules: {
+    enabled: false,
+    unit: "g",
+    tiers: [
+      { maxWeight: 250, insideDhaka: 80, outsideDhaka: 130 },
+      { maxWeight: 500, insideDhaka: 120, outsideDhaka: 180 },
+      { maxWeight: 1000, insideDhaka: 160, outsideDhaka: 220 }
+    ]
+  },
   freeDeliveryThresholdQty: 2,
   optionGroups: [
     {
@@ -345,6 +373,16 @@ export const defaultConfig: SiteConfig = {
   ],
   signatureImage: "/gallery/gallery-main.png",
   deliveryPartners: ["Pathao", "Steadfast"],
+  paymentProviders: {
+    bkash: false,
+    nagad: false,
+    rocket: false
+  },
+  paymentLinks: {
+    bkash: "",
+    nagad: "",
+    rocket: ""
+  },
   merchant: {
     bankName: "Example Bank",
     accountName: "Sahariar's Pen",

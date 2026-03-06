@@ -29,7 +29,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ? orders.filter((order: any) => order.status === statusFilter)
     : orders;
 
-  const header = ["OrderId", "Name", "Phone", "Address", "City", "Area", "CODAmount", "Notes", "Items", "Status", "TrackingCode", "Courier"];
+  const header = [
+    "OrderId",
+    "Name",
+    "Phone",
+    "Address",
+    "City",
+    "Area",
+    "CODAmount",
+    "Notes",
+    "Items",
+    "Status",
+    "TrackingCode",
+    "Courier",
+    "PaymentProvider",
+    "PaidAmount",
+    "FraudFlags",
+    "FraudScore",
+    "PaymentLink",
+    "CallStatus",
+    "CallNotes"
+  ];
   const rows: string[][] = filtered.map((order: any) => {
     const items = (order.items || [])
       .map((item: any) => `${item.productId}${item.variantId ? `(${item.variantId})` : ""} x${item.quantity}`)
@@ -47,7 +67,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       items,
       order.status,
       order.trackingCode || "",
-      order.shippingPartner || ""
+      order.shippingPartner || "",
+      order.paymentProvider || "",
+      order.paidAmount ? String(order.paidAmount) : "",
+      Array.isArray(order.fraudFlags) ? order.fraudFlags.join("|") : "",
+      order.fraudScore ? String(order.fraudScore) : "",
+      order.paymentLink || "",
+      order.callStatus || "",
+      order.callNotes || ""
     ].map((value) => csvEscape(String(value)));
   });
 

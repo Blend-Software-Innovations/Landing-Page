@@ -610,6 +610,78 @@ export default function AdminDashboard() {
             onChange={(v) => updateConfig({ ...config, freeDeliveryThresholdQty: Number(v || 0) })}
           />
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={config.shippingRules?.enabled}
+                onChange={(e) =>
+                  updateConfig({
+                    ...config,
+                    shippingRules: { ...config.shippingRules, enabled: e.target.checked }
+                  })
+                }
+              />
+              Enable weight-based shipping
+            </label>
+            <div className="text-xs text-slate-500">Unit: grams (g)</div>
+            <div className="space-y-3">
+              {(config.shippingRules?.tiers || []).map((tier, index) => (
+                <div key={`${tier.maxWeight}-${index}`} className="grid gap-3 md:grid-cols-4">
+                  <InputField
+                    label="Max weight (g)"
+                    value={String(tier.maxWeight)}
+                    onChange={(v) => {
+                      const next = [...(config.shippingRules?.tiers || [])];
+                      next[index] = { ...tier, maxWeight: Number(v || 0) };
+                      updateConfig({ ...config, shippingRules: { ...config.shippingRules, tiers: next } });
+                    }}
+                  />
+                  <InputField
+                    label="Inside Dhaka fee"
+                    value={String(tier.insideDhaka)}
+                    onChange={(v) => {
+                      const next = [...(config.shippingRules?.tiers || [])];
+                      next[index] = { ...tier, insideDhaka: Number(v || 0) };
+                      updateConfig({ ...config, shippingRules: { ...config.shippingRules, tiers: next } });
+                    }}
+                  />
+                  <InputField
+                    label="Outside Dhaka fee"
+                    value={String(tier.outsideDhaka)}
+                    onChange={(v) => {
+                      const next = [...(config.shippingRules?.tiers || [])];
+                      next[index] = { ...tier, outsideDhaka: Number(v || 0) };
+                      updateConfig({ ...config, shippingRules: { ...config.shippingRules, tiers: next } });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600"
+                    onClick={() => {
+                      const next = (config.shippingRules?.tiers || []).filter((_, idx) => idx !== index);
+                      updateConfig({ ...config, shippingRules: { ...config.shippingRules, tiers: next } });
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+              onClick={() => {
+                const next = [
+                  ...(config.shippingRules?.tiers || []),
+                  { maxWeight: 2000, insideDhaka: 200, outsideDhaka: 260 }
+                ];
+                updateConfig({ ...config, shippingRules: { ...config.shippingRules, tiers: next } });
+              }}
+            >
+              Add weight tier
+            </button>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="text-sm font-semibold text-slate-700">Delivery partners (shown for COD)</div>
             <div className="flex flex-wrap gap-2">
               {(config.deliveryPartners || []).map((partner) => (
@@ -1160,6 +1232,52 @@ export default function AdminDashboard() {
             <InputField label="bKash" value={config.merchant.bkash} onChange={(v) => updateConfig({ ...config, merchant: { ...config.merchant, bkash: v } })} />
             <InputField label="Nagad" value={config.merchant.nagad} onChange={(v) => updateConfig({ ...config, merchant: { ...config.merchant, nagad: v } })} />
           </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={config.paymentProviders?.bkash}
+                onChange={(e) => updateConfig({ ...config, paymentProviders: { ...config.paymentProviders, bkash: e.target.checked } })}
+              />
+              Enable bKash payment link
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={config.paymentProviders?.nagad}
+                onChange={(e) => updateConfig({ ...config, paymentProviders: { ...config.paymentProviders, nagad: e.target.checked } })}
+              />
+              Enable Nagad payment link
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={config.paymentProviders?.rocket}
+                onChange={(e) => updateConfig({ ...config, paymentProviders: { ...config.paymentProviders, rocket: e.target.checked } })}
+              />
+              Enable Rocket payment link
+            </label>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <InputField
+              label="bKash link base URL"
+              value={config.paymentLinks?.bkash || ""}
+              onChange={(v) => updateConfig({ ...config, paymentLinks: { ...config.paymentLinks, bkash: v } })}
+              placeholder="https://pay.bkash.com/?"
+            />
+            <InputField
+              label="Nagad link base URL"
+              value={config.paymentLinks?.nagad || ""}
+              onChange={(v) => updateConfig({ ...config, paymentLinks: { ...config.paymentLinks, nagad: v } })}
+              placeholder="https://app.nagad.com.bd/pay?"
+            />
+            <InputField
+              label="Rocket link base URL"
+              value={config.paymentLinks?.rocket || ""}
+              onChange={(v) => updateConfig({ ...config, paymentLinks: { ...config.paymentLinks, rocket: v } })}
+              placeholder="https://rocket.example.com/pay?"
+            />
+          </div>
         </Section>
 
         <Section title="Footer & Notice" hint="Footer copy and top notice bar.">
@@ -1209,8 +1327,72 @@ export default function AdminDashboard() {
                     <div className="text-sm font-semibold">{order.customerName}</div>
                     <div className="text-xs text-slate-500">{order.phone}</div>
                     <div className="text-xs text-slate-500">BDT {order.total}</div>
+                    {order.paymentLink ? (
+                      <a href={order.paymentLink} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">
+                        Payment link
+                      </a>
+                    ) : null}
+                    {order.callStatus && (
+                      <div className="text-xs text-slate-500">Call: {order.callStatus}</div>
+                    )}
+                    {order.fraudFlags?.length ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {order.fraudFlags.map((flag: string) => (
+                          <span key={flag} className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                            {flag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={order.callStatus || "PENDING"}
+                        onChange={(e) => {
+                          const next = orders.map((item) =>
+                            item.id === order.id ? { ...item, callStatus: e.target.value } : item
+                          );
+                          setOrders(next);
+                        }}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                        disabled={!canManageOrders}
+                      >
+                        <option value="PENDING">Call Pending</option>
+                        <option value="VERIFIED">Call Verified</option>
+                        <option value="UNVERIFIED">Call Unverified</option>
+                      </select>
+                      <input
+                        value={order.callNotes || ""}
+                        onChange={(e) => {
+                          const next = orders.map((item) =>
+                            item.id === order.id ? { ...item, callNotes: e.target.value } : item
+                          );
+                          setOrders(next);
+                        }}
+                        placeholder="Call notes"
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                        disabled={!canManageOrders}
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!canManageOrders) return;
+                          await fetch("/api/admin/call-verification", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({
+                              orderId: order.id,
+                              status: order.callStatus || "PENDING",
+                              notes: order.callNotes || ""
+                            })
+                          });
+                          loadOrders();
+                        }}
+                        className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                        disabled={!canManageOrders}
+                      >
+                        Save call status
+                      </button>
                       <select
                         value={order.status}
                         onChange={async (e) => {
@@ -1280,6 +1462,27 @@ export default function AdminDashboard() {
                       >
                         Update tracking
                       </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!canManageOrders) return;
+                          const response = await fetch("/api/admin/courier-create", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({ orderId: order.id, partner: order.shippingPartner || "" })
+                          });
+                          if (!response.ok) {
+                            const data = (await response.json().catch(() => ({}))) as { error?: string };
+                            setStatus(data.error || "Courier API failed");
+                            return;
+                          }
+                          loadOrders();
+                        }}
+                        className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                        disabled={!canManageOrders || !order.shippingPartner}
+                      >
+                        Create shipment
+                      </button>
                     <a
                       href={`/admin/packing/${order.id}`}
                       target="_blank"
@@ -1287,6 +1490,14 @@ export default function AdminDashboard() {
                       className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
                     >
                       Packing slip
+                    </a>
+                    <a
+                      href={`/admin/label/${order.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
+                    >
+                      Label
                     </a>
                       <a
                         href={`/admin/invoice/${order.id}`}

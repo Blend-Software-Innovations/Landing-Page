@@ -49,11 +49,15 @@ type UiCopy = {
   otpNote: string;
   codCta: string;
   manualCta: string;
+  paymentBkash: string;
+  paymentNagad: string;
+  paymentRocket: string;
   paymentStripe: string;
   paymentManual: string;
   manualNote: string;
   txnLabel: string;
   proofLabel: string;
+  paidAmountLabel: string;
   deliveryInside: string;
   deliveryOutside: string;
   selectProduct: string;
@@ -123,11 +127,15 @@ const ui: Record<Lang, UiCopy> = {
     otpNote: "We use OTP to reduce fake orders.",
     codCta: "Confirm COD Order",
     manualCta: "Submit Payment Proof",
+    paymentBkash: "Pay with bKash",
+    paymentNagad: "Pay with Nagad",
+    paymentRocket: "Pay with Rocket",
     paymentStripe: "Pay instantly with Stripe",
     paymentManual: "Manual payment (Bank / bKash / Nagad)",
     manualNote: "Send the exact order amount and upload the payment screenshot.",
     txnLabel: "Transaction ID",
     proofLabel: "Payment screenshot",
+    paidAmountLabel: "Paid amount (BDT)",
     deliveryInside: "Inside Dhaka",
     deliveryOutside: "Outside Dhaka",
     selectProduct: "Select product",
@@ -195,11 +203,15 @@ const ui: Record<Lang, UiCopy> = {
     otpNote: "ফেক অর্ডার কমানোর জন্য OTP ব্যবহার করা হয়।",
     codCta: "COD অর্ডার কনফার্ম করুন",
     manualCta: "পেমেন্ট প্রুফ সাবমিট করুন",
+    paymentBkash: "bKash দিয়ে পেমেন্ট",
+    paymentNagad: "Nagad দিয়ে পেমেন্ট",
+    paymentRocket: "Rocket দিয়ে পেমেন্ট",
     paymentStripe: "Stripe দিয়ে সাথে সাথে পেমেন্ট",
     paymentManual: "ম্যানুয়াল পেমেন্ট (ব্যাংক / bKash / Nagad)",
     manualNote: "অর্ডার এমাউন্ট অনুযায়ী পেমেন্ট করে স্ক্রিনশট আপলোড করুন।",
     txnLabel: "ট্রান্স্যাকশন আইডি",
     proofLabel: "পেমেন্ট স্ক্রিনশট",
+    paidAmountLabel: "পরিশোধিত টাকার পরিমাণ (BDT)",
     deliveryInside: "ঢাকার ভিতরে",
     deliveryOutside: "ঢাকার বাইরে",
     selectProduct: "পণ্য নির্বাচন",
@@ -237,6 +249,7 @@ type CartItem = {
   optionValues: Record<string, string>;
   quantity: number;
   unitPrice: number;
+  weightPerUnit: number;
 };
 
 function loadCart(): CartItem[] {
@@ -372,7 +385,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const [quantity, setQuantity] = useState(1);
   const [giftWrap, setGiftWrap] = useState(false);
   const [cod, setCod] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual">("stripe");
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual" | "bkash" | "nagad" | "rocket">("stripe");
   const [otpId, setOtpId] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpToken, setOtpToken] = useState("");
@@ -391,6 +404,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [marketingConsent, setMarketingConsent] = useState(false);
+  const [deviceFingerprint, setDeviceFingerprint] = useState("");
 
   const optionGroups = config.optionGroups ?? [];
   useEffect(() => {
@@ -412,6 +426,27 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   useEffect(() => {
     if (typeof window === "undefined") return;
     setMarketingConsent(hasMarketingConsent());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = [
+      navigator.userAgent,
+      navigator.language,
+      `${screen.width}x${screen.height}`,
+      Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+    ].join("|");
+    const encoder = new TextEncoder();
+    const data = encoder.encode(raw);
+    if (window.crypto?.subtle?.digest) {
+      window.crypto.subtle.digest("SHA-256", data).then((hash) => {
+        const bytes = Array.from(new Uint8Array(hash));
+        const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+        setDeviceFingerprint(hex.slice(0, 32));
+      });
+    } else {
+      setDeviceFingerprint(btoa(unescape(encodeURIComponent(raw))).slice(0, 32));
+    }
   }, []);
 
   const activeExperiment: Experiment | undefined = useMemo(
@@ -514,16 +549,29 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     variantId: selectedVariant?.sku || "",
     optionValues: { ...selectedOptions },
     quantity,
-    unitPrice
+    unitPrice,
+    weightPerUnit: selectedVariant?.weight || 0
   };
   const cartSubtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const effectiveSubtotal = cart.length ? cartSubtotal : unitPrice * quantity;
   const totalQuantity = cart.length ? cart.reduce((sum, item) => sum + item.quantity, 0) : quantity;
   const giftWrapFee = giftWrap ? 120 : 0;
-  const rawShippingFee =
-    deliveryZone === "insideDhaka"
+  const totalWeight = cart.length
+    ? cart.reduce((sum, item) => sum + item.weightPerUnit * item.quantity, 0)
+    : currentItem.weightPerUnit * currentItem.quantity;
+  const rawShippingFee = (() => {
+    const rules = displayConfig.shippingRules;
+    if (rules?.enabled && rules.tiers?.length) {
+      const sorted = [...rules.tiers].sort((a, b) => a.maxWeight - b.maxWeight);
+      const tier = sorted.find((t) => totalWeight <= t.maxWeight) || sorted[sorted.length - 1];
+      if (tier) {
+        return deliveryZone === "insideDhaka" ? tier.insideDhaka : tier.outsideDhaka;
+      }
+    }
+    return deliveryZone === "insideDhaka"
       ? displayConfig.shippingFees?.insideDhaka ?? 0
       : displayConfig.shippingFees?.outsideDhaka ?? 0;
+  })();
   const freeDeliveryQty = displayConfig.freeDeliveryThresholdQty ?? 0;
   const shippingFee = freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty ? 0 : rawShippingFee;
   const discount = effectiveSubtotal >= 10000 || totalQuantity >= 3 ? Math.round(effectiveSubtotal * 0.05) : 0;
@@ -646,11 +694,13 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
       city: String(formData.get("city") || "").trim(),
       area: String(formData.get("area") || "").trim(),
         note: String(formData.get("note") || "").trim(),
-        transactionId: String(formData.get("transactionId") || "").trim(),
-        otpToken,
+      transactionId: String(formData.get("transactionId") || "").trim(),
+      paidAmount: Number(String(formData.get("paidAmount") || "0")) || 0,
+      otpToken,
       quantity,
       giftWrap,
       cod,
+      deviceFingerprint,
       shippingPartner: courierPartner,
       deliveryZone,
       paymentMethod,
@@ -765,6 +815,28 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
         setSuccess(t.manualSuccess);
         setCart([]);
         fireMarketingEvent("purchase", { currency: "BDT", value: total, email: payload.email, phone: payload.phone });
+      }
+      setLoading(false);
+      return;
+    }
+
+    if (paymentMethod === "bkash" || paymentMethod === "nagad" || paymentMethod === "rocket") {
+      const response = await fetch("/api/payment-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, total })
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        setError(data.error || "Unable to create payment link.");
+        setLoading(false);
+        return;
+      }
+      const data = (await response.json()) as { url?: string };
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError("Payment link not available.");
       }
       setLoading(false);
       return;
@@ -1197,6 +1269,42 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                       />
                       Stripe
                     </label>
+                    {displayConfig.paymentProviders?.bkash && (
+                      <label className="flex items-center gap-2 text-xs text-slate-500">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="bkash"
+                          checked={paymentMethod === "bkash"}
+                          onChange={() => setPaymentMethod("bkash")}
+                        />
+                        {t.paymentBkash}
+                      </label>
+                    )}
+                    {displayConfig.paymentProviders?.nagad && (
+                      <label className="flex items-center gap-2 text-xs text-slate-500">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="nagad"
+                          checked={paymentMethod === "nagad"}
+                          onChange={() => setPaymentMethod("nagad")}
+                        />
+                        {t.paymentNagad}
+                      </label>
+                    )}
+                    {displayConfig.paymentProviders?.rocket && (
+                      <label className="flex items-center gap-2 text-xs text-slate-500">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="rocket"
+                          checked={paymentMethod === "rocket"}
+                          onChange={() => setPaymentMethod("rocket")}
+                        />
+                        {t.paymentRocket}
+                      </label>
+                    )}
                     <label className="flex items-center gap-2 text-xs text-slate-500">
                       <input
                         type="radio"
@@ -1218,6 +1326,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                         <div>Nagad: {displayConfig.merchant.nagad}</div>
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
                           <input name="transactionId" className="rounded-lg border border-slate-200 px-3 py-2" placeholder={t.txnLabel} />
+                          <input name="paidAmount" className="rounded-lg border border-slate-200 px-3 py-2" placeholder={t.paidAmountLabel} />
                           <input name="paymentProof" type="file" accept="image/*" className="rounded-lg border border-slate-200 px-3 py-2" />
                         </div>
                       </div>

@@ -1,15 +1,14 @@
-﻿import type { NextApiRequest, NextApiResponse } from "next";
-import fs from "fs";
-import path from "path";
+import type { NextApiRequest, NextApiResponse } from "next";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
-import { createOrder } from "../../lib/orders";
 import { getConfig } from "../../lib/siteConfig.server";
 import { validateOtpToken } from "../../lib/otp";
+import { createOrder } from "../../lib/orders";
 import { detectFraud } from "../../lib/fraud";
-
-const dataPath = path.join(process.cwd(), "data", "cod.jsonl");
+import { buildPaymentLink } from "../../lib/paymentLinks";
+import { writeOrderAudit } from "../../lib/notifications";
+import { getPrisma } from "../../lib/prisma";
 
 function normalizePhone(input: string) {
   const digits = input.replace(/\D/g, "");
@@ -25,19 +24,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`cod:${ip}`, publicRateLimitPerMin, 60_000)) {
+  if (isRateLimited(`payment-link:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
 
   const payload = req.body || {};
-  const otpToken = String(payload.otpToken || "");
   const config = await getConfig();
   if (config.features?.otpEnabled) {
     const normalizedPhone = normalizePhone(String(payload.phone || ""));
+    const otpToken = String(payload.otpToken || "");
     if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
       return res.status(401).json({ error: "OTP verification required" });
     }
   }
+
+  const provider = String(payload.paymentMethod || "").toLowerCase();
+  if (!["bkash", "nagad", "rocket"].includes(provider)) {
+    return res.status(400).json({ error: "Invalid payment provider" });
+  }
+  if (!config.paymentProviders?.[provider as "bkash" | "nagad" | "rocket"]) {
+    return res.status(400).json({ error: "Payment provider is disabled" });
+  }
+
   const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
   const items = itemsRaw.length
     ? itemsRaw.map((item: any) => ({
@@ -78,39 +86,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     reservationIds.push(reservationId);
     resolvedItems.push({ ...item, variantId: resolvedId });
   }
-  const record = {
-    ...payload,
-    reservationIds,
-    createdAt: new Date().toISOString()
-  };
+
   const fraud = await detectFraud({
-    phone: payload.phone || "",
-    deviceFingerprint: payload.deviceFingerprint || "",
-    transactionId: payload.transactionId || ""
+    phone: String(payload.phone || ""),
+    deviceFingerprint: String(payload.deviceFingerprint || "")
   });
-  await createOrder({
+
+  const order = await createOrder({
     customerName: payload.name || "",
     phone: payload.phone || "",
     address: payload.address || "",
     city: payload.city || "",
     area: payload.area || "",
     total: Number(payload.total || 0),
-    paymentMethod: "COD",
+    paymentMethod: provider.toUpperCase(),
     paymentStatus: "UNPAID",
-    transactionId: payload.transactionId || undefined,
-    shippingPartner: payload.shippingPartner || undefined,
-    deviceFingerprint: payload.deviceFingerprint || undefined,
-    fraudFlags: fraud.flags,
-    fraudScore: fraud.score,
     productId: payload.productId || "",
     variantId: payload.variantId || "",
     quantity: Number(payload.quantity || 1),
     unitPrice: Math.round(Number(payload.total || 0) / Math.max(1, Number(payload.quantity || 1))),
     reservationIds,
     items: resolvedItems,
-    status: "PENDING"
+    deviceFingerprint: payload.deviceFingerprint || "",
+    fraudFlags: fraud.flags,
+    fraudScore: fraud.score,
+    paymentProvider: provider.toUpperCase()
   });
-  fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-  fs.appendFileSync(dataPath, `${JSON.stringify(record)}\n`);
-  return res.status(200).json({ status: "ok" });
+
+  const link = buildPaymentLink(
+    provider as any,
+    { orderId: order.id, amount: order.total, phone: order.phone },
+    config
+  );
+  if (!link) {
+    return res.status(400).json({ error: "Payment link not configured" });
+  }
+
+  const prisma = getPrisma() as any;
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { paymentLink: link }
+  });
+  await writeOrderAudit({
+    orderId: order.id,
+    action: "payment.link.created",
+    data: { provider, link }
+  });
+
+  return res.status(200).json({ url: link });
 }
