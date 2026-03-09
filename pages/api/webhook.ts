@@ -1,3 +1,4 @@
+import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 import fs from "fs";
@@ -37,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`webhook:${ip}`, publicRateLimitPerMin, 60_000)) {
+  if (await isRateLimited(`webhook:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
 
@@ -57,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     event = stripe.webhooks.constructEvent(raw, sig, webhookSecret);
   } catch (error) {
-    console.error("Webhook signature verification failed", error);
+    logger.error({ err: error }, "Webhook signature verification failed");
     return res.status(400).json({ error: "Invalid signature" });
   }
 
@@ -67,6 +68,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const meta = session.metadata || {};
+    const stripeTransactionId = session.payment_intent ? String(session.payment_intent) : "";
+
+    // Idempotency guard: Stripe can retry webhooks — skip if already processed
+    if (stripeTransactionId) {
+      const { getPrisma } = await import("../../lib/prisma");
+      const prisma = getPrisma() as any;
+      const existing = await prisma.order.findFirst({ where: { transactionId: stripeTransactionId } });
+      if (existing) {
+        return res.status(200).json({ received: true });
+      }
+    }
+
     const reservationIds = meta.reservationIds ? meta.reservationIds.split(",").filter(Boolean) : [];
     for (const id of reservationIds) {
       await commitInventory(id);
@@ -74,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const fraud = await detectFraud({
       phone: meta.phone || "",
       deviceFingerprint: meta.deviceFingerprint || "",
-      transactionId: session.payment_intent ? String(session.payment_intent) : ""
+      transactionId: stripeTransactionId
     });
     let cartItems: Array<any> = [];
     if (meta.cart) {
@@ -112,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       total: Number(session.amount_total || 0) / 100 || 0,
       paymentMethod: "STRIPE",
       paymentStatus: "PAID",
-      transactionId: session.payment_intent ? String(session.payment_intent) : undefined,
+      transactionId: stripeTransactionId || undefined,
       shippingPartner: meta.shippingPartner || undefined,
       deviceFingerprint: meta.deviceFingerprint || undefined,
       fraudFlags: fraud.flags,
@@ -136,7 +149,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             : "Payment confirmed. We will process your order soon."
         });
       } catch (error) {
-        console.error("Twilio webhook send failed", error);
+        logger.error({ err: error }, "Twilio webhook send failed");
       }
     }
   }

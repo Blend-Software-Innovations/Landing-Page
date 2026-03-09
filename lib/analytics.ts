@@ -2,6 +2,7 @@
 import path from "path";
 import { getPool } from "./db";
 import { nanoid } from "nanoid";
+import { logger } from "./logger";
 
 export type AnalyticsEvent = {
   name: string;
@@ -25,14 +26,14 @@ export async function recordEvent(event: AnalyticsEvent) {
       );
       return;
     } catch (error) {
-      console.error("Failed to save analytics event to database", error);
+      logger.error({ err: error }, "Failed to save analytics event to database");
     }
   }
 
   try {
     fs.appendFileSync(analyticsPath, `${JSON.stringify(event)}\n`, "utf8");
   } catch (error) {
-    console.error("Failed to write analytics event file", error);
+    logger.error({ err: error }, "Failed to write analytics event file");
   }
 }
 
@@ -79,7 +80,7 @@ export async function getAnalyticsSummary(): Promise<AnalyticsSummary> {
         events
       };
     } catch (error) {
-      console.error("Failed to load analytics summary from database", error);
+      logger.error({ err: error }, "Failed to load analytics summary from database");
     }
   }
 

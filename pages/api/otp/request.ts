@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { applyCors } from "../../../lib/cors";
 import { isRateLimited } from "../../../lib/rateLimit";
@@ -25,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`otp-request:${ip}`, publicRateLimitPerMin, 60_000)) {
+  if (await isRateLimited(`otp-request:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
 
@@ -60,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         body: `Your OTP code is ${code}. It expires in ${otpTtlMin} minutes.`
       });
     } catch (error) {
-      console.error("OTP SMS failed", error);
+      logger.error({ err: error }, "OTP SMS failed");
     }
   }
 

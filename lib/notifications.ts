@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 import { getPrisma } from "./prisma";
 import twilio from "twilio";
 
@@ -8,23 +9,11 @@ const twilioClient = twilioSid && twilioAuth ? twilio(twilioSid, twilioAuth) : n
 
 export async function notifyOrderStatusChange(order: any, previousStatus: string, nextStatus: string) {
   // Placeholder for SMS/email integrations.
-  console.log("[notify] order status change", {
-    orderId: order.id,
-    previousStatus,
-    nextStatus,
-    customer: order.customerName,
-    phone: order.phone
-  });
+  logger.info({ orderId: order.id, previousStatus, nextStatus, customer: order.customerName }, "order status change");
 }
 
 export async function notifyNewOrder(order: any) {
-  // Placeholder for new-order notifications.
-  console.log("[notify] new order", {
-    orderId: order.id,
-    customer: order.customerName,
-    phone: order.phone,
-    total: order.total
-  });
+  logger.info({ orderId: order.id, customer: order.customerName, total: order.total }, "new order");
 }
 
 export async function notifyManualPaymentReview(order: any, status: "VERIFIED" | "REJECTED") {
@@ -41,7 +30,7 @@ export async function notifyManualPaymentReview(order: any, status: "VERIFIED" |
       body: message
     });
   } catch (error) {
-    console.error("Manual payment SMS failed", error);
+    logger.error({ err: error }, "Manual payment SMS failed");
   }
 }
 

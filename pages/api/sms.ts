@@ -1,3 +1,4 @@
+import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 import twilio from "twilio";
@@ -21,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`sms:${ip}`, publicRateLimitPerMin, 60_000)) {
+  if (await isRateLimited(`sms:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
 
@@ -42,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         message = `Hi ${meta.name}, your payment is confirmed. We will process your order soon.`;
       }
     } catch (error) {
-      console.error("Failed to fetch Stripe session", error);
+      logger.error({ err: error }, "Failed to fetch Stripe session");
     }
   }
 
@@ -58,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     return res.status(200).json({ status: "sent", sid: result.sid });
   } catch (error) {
-    console.error("Twilio send error", error);
+    logger.error({ err: error }, "Twilio send error");
     return res.status(500).json({ error: "Failed to send SMS" });
   }
 }
