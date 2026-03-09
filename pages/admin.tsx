@@ -89,12 +89,19 @@ export default function AdminDashboard() {
   const [otpMetrics, setOtpMetrics] = useState<Array<{ phone: string; lastRequested?: string; attempts: number; pending: number; cooldownUntil?: string; lockedUntil?: string }>>([]);
   const [otpSearch, setOtpSearch] = useState("");
   const [holds, setHolds] = useState<any[]>([]);
+  const [utmSummary, setUtmSummary] = useState<Array<{ source: string; campaign: string; orders: number; revenue: number }>>([]);
+  const [abandoned, setAbandoned] = useState<any[]>([]);
   const [partnerInput, setPartnerInput] = useState("");
+  const [adminUsers, setAdminUsers] = useState<Array<{ id: string; email: string; role: string }>>([]);
+  const [bulkPriceDelta, setBulkPriceDelta] = useState("");
+  const [bulkStockDelta, setBulkStockDelta] = useState("");
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   const canWrite = role === "admin" || role === "owner";
   const canManageOrders = role === "admin" || role === "owner";
+  const canPackOrders = role === "staff" || canManageOrders;
   const canManageInventory = role === "admin" || role === "owner";
+  const canManageUsers = role === "admin" || role === "owner";
 
   const loadConfig = async () => {
     const headers = getAuthHeaders();
@@ -162,6 +169,27 @@ export default function AdminDashboard() {
     setHolds(data.holds || []);
   };
 
+  const loadUsers = async () => {
+    const response = await fetch("/api/admin/users", { headers: getAuthHeaders() });
+    if (!response.ok) return;
+    const data = (await response.json()) as { users?: Array<{ id: string; email: string; role: string }> };
+    setAdminUsers(data.users || []);
+  };
+
+  const loadUtmSummary = async () => {
+    const response = await fetch("/api/admin/utm-summary", { headers: getAuthHeaders() });
+    if (!response.ok) return;
+    const data = (await response.json()) as { rows?: any[] };
+    setUtmSummary(data.rows || []);
+  };
+
+  const loadAbandoned = async () => {
+    const response = await fetch("/api/admin/abandoned", { headers: getAuthHeaders() });
+    if (!response.ok) return;
+    const data = (await response.json()) as { rows?: any[] };
+    setAbandoned(data.rows || []);
+  };
+
   useEffect(() => {
         loadConfig()
           .then(() => {
@@ -171,6 +199,9 @@ export default function AdminDashboard() {
             loadManualSummary();
             loadOtpMetrics();
             loadHolds();
+            loadUtmSummary();
+            loadAbandoned();
+            loadUsers();
           })
           .catch(() => setStatus("Unable to load configuration."));
       }, []);
@@ -586,6 +617,7 @@ export default function AdminDashboard() {
             <InputField label="YouTube" value={config.social.youtube} onChange={(v) => updateConfig({ ...config, social: { ...config.social, youtube: v } })} />
           </div>
         </Section>
+        {canWrite && (
         <Section title="Pricing & Delivery" hint="Set the base price and delivery fees.">
           <div className="grid gap-4 md:grid-cols-3">
             <InputField
@@ -725,7 +757,9 @@ export default function AdminDashboard() {
             </div>
           </div>
         </Section>
+        )}
 
+        {canWrite && (
         <Section title="Options" hint="Option groups appear in the order form.">
           <div className="space-y-4">
             {optionGroups.map((group, index) => (
@@ -799,7 +833,9 @@ export default function AdminDashboard() {
             </button>
           </div>
         </Section>
+        )}
 
+        {canWrite && (
         <Section title="Materialized variants" hint="Generate variants from option groups and edit stock/SKU/weight/images.">
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -812,7 +848,99 @@ export default function AdminDashboard() {
             >
               Generate variants
             </button>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold"
+              onClick={() => {
+                const headers = ["sku", "stockQty", "price", "weight", "images"];
+                const rows = variants.map((variant) => [
+                  variant.sku,
+                  String(variant.stockQty),
+                  String(variant.price),
+                  variant.weight ? String(variant.weight) : "",
+                  (variant.images || []).join("|")
+                ]);
+                const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${String(c).replace(/\"/g, '""')}"`).join(","))].join("\n");
+                const blob = new Blob([csv], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = "variants.csv";
+                link.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              Export CSV
+            </button>
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold cursor-pointer">
+              Import CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const text = await file.text();
+                  const lines = text.split(/\r?\n/).filter(Boolean);
+                  if (lines.length < 2) return;
+                  const headers = lines[0].split(",").map((h) => h.replace(/"/g, "").trim());
+                  const rows = lines.slice(1).map((line) => {
+                    const cells = line.split(",").map((c) => c.replace(/(^\"|\"$)/g, "").trim());
+                    const row: Record<string, string> = {};
+                    headers.forEach((h, i) => (row[h] = cells[i] || ""));
+                    return row;
+                  });
+                  const next = variants.map((variant) => {
+                    const row = rows.find((r) => r.sku === variant.sku);
+                    if (!row) return variant;
+                    return {
+                      ...variant,
+                      stockQty: row.stockQty ? Number(row.stockQty) : variant.stockQty,
+                      price: row.price ? Number(row.price) : variant.price,
+                      weight: row.weight ? Number(row.weight) : variant.weight,
+                      images: row.images ? row.images.split("|").map((i) => i.trim()).filter(Boolean) : variant.images
+                    };
+                  });
+                  updateConfig({ ...config, variants: next });
+                }}
+              />
+            </label>
+            <div className="text-xs text-slate-500">CSV columns: sku, stockQty, price, weight, images (pipe-separated)</div>
             <span className="text-xs text-slate-500">Existing variants: {variants.length}</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <InputField
+              label="Bulk price delta (BDT)"
+              value={bulkPriceDelta}
+              onChange={(v) => setBulkPriceDelta(v)}
+              placeholder="e.g. 100 or -50"
+            />
+            <InputField
+              label="Bulk stock delta"
+              value={bulkStockDelta}
+              onChange={(v) => setBulkStockDelta(v)}
+              placeholder="e.g. 10 or -2"
+            />
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold self-end"
+              onClick={() => {
+                const priceDelta = Number(bulkPriceDelta || "0");
+                const stockDelta = Number(bulkStockDelta || "0");
+                if (!priceDelta && !stockDelta) return;
+                const next = variants.map((variant) => ({
+                  ...variant,
+                  price: Math.max(0, variant.price + priceDelta),
+                  stockQty: Math.max(0, variant.stockQty + stockDelta)
+                }));
+                updateConfig({ ...config, variants: next });
+                setBulkPriceDelta("");
+                setBulkStockDelta("");
+              }}
+            >
+              Apply bulk update
+            </button>
           </div>
           <div className="space-y-3">
             {variants.map((variant, index) => (
@@ -874,6 +1002,7 @@ export default function AdminDashboard() {
             ))}
           </div>
         </Section>
+        )}
 
         <Section title="Products" hint="Enable multi-product mode to sell multiple items.">
           <div className="flex flex-wrap gap-3 text-sm">
@@ -1223,6 +1352,7 @@ export default function AdminDashboard() {
           </div>
         </Section>
 
+        {canWrite && (
         <Section title="Merchant & Payments" hint="Manual payment details shown to customers.">
           <div className="grid gap-4 md:grid-cols-2">
             <InputField label="Bank name" value={config.merchant.bankName} onChange={(v) => updateConfig({ ...config, merchant: { ...config.merchant, bankName: v } })} />
@@ -1279,7 +1409,9 @@ export default function AdminDashboard() {
             />
           </div>
         </Section>
+        )}
 
+        {canWrite && (
         <Section title="Footer & Notice" hint="Footer copy and top notice bar.">
           <div className="grid gap-4 md:grid-cols-2">
             <TextAreaField label="Top notice" value={config.topNotice} onChange={(v) => updateConfig({ ...config, topNotice: v })} />
@@ -1288,6 +1420,7 @@ export default function AdminDashboard() {
             <InputField label="Google review URL" value={config.googleReviewUrl} onChange={(v) => updateConfig({ ...config, googleReviewUrl: v })} />
           </div>
         </Section>
+        )}
 
           <Section title="Orders" hint="Manage order status and print packing slip.">
             <div className="flex flex-wrap items-center gap-3">
@@ -1355,7 +1488,7 @@ export default function AdminDashboard() {
                           setOrders(next);
                         }}
                         className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
-                        disabled={!canManageOrders}
+                        disabled={!canPackOrders}
                       >
                         <option value="PENDING">Call Pending</option>
                         <option value="VERIFIED">Call Verified</option>
@@ -1371,7 +1504,7 @@ export default function AdminDashboard() {
                         }}
                         placeholder="Call notes"
                         className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
-                        disabled={!canManageOrders}
+                        disabled={!canPackOrders}
                       />
                       <button
                         type="button"
@@ -1389,14 +1522,14 @@ export default function AdminDashboard() {
                           loadOrders();
                         }}
                         className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
-                        disabled={!canManageOrders}
+                        disabled={!canPackOrders}
                       >
                         Save call status
                       </button>
-                      <select
+                        <select
                         value={order.status}
                         onChange={async (e) => {
-                          if (!canManageOrders) return;
+                          if (!canPackOrders) return;
                           await fetch("/api/admin/order-status", {
                             method: "POST",
                             headers: { "Content-Type": "application/json", ...getAuthHeaders() },
@@ -1406,13 +1539,13 @@ export default function AdminDashboard() {
                           loadHolds();
                         }}
                         className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
-                        disabled={!canManageOrders}
+                        disabled={!canPackOrders}
                       >
                       {getOrderStatusOptions(order.status).map((status) => (
                         <option key={status} value={status}>{status}</option>
                       ))}
                     </select>
-                      <input
+                        <input
                         value={order.trackingCode || ""}
                         onChange={(e) => {
                           const next = orders.map((item) =>
@@ -1422,7 +1555,7 @@ export default function AdminDashboard() {
                         }}
                         placeholder="Tracking code"
                         className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
-                        disabled={!canManageOrders}
+                        disabled={!canPackOrders}
                       />
                       <select
                         value={order.shippingPartner || ""}
@@ -1458,7 +1591,7 @@ export default function AdminDashboard() {
                           loadOrders();
                         }}
                         className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold"
-                        disabled={!canManageOrders}
+                        disabled={!canPackOrders}
                       >
                         Update tracking
                       </button>
@@ -1551,7 +1684,7 @@ export default function AdminDashboard() {
                               loadOrders();
                               loadManualSummary();
                             }}
-                            disabled={!canManageOrders}
+                        disabled={!canPackOrders}
                           >
                             Verify
                           </button>
@@ -1599,6 +1732,7 @@ export default function AdminDashboard() {
             </div>
           </Section>
 
+        {canManageInventory && (
         <Section title="Inventory holds" hint="Release stuck reservations if needed.">
           <div className="flex flex-wrap items-center gap-3">
             <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold" onClick={loadHolds}>
@@ -1640,6 +1774,8 @@ export default function AdminDashboard() {
             ))}
           </div>
         </Section>
+        )}
+        {canManageOrders && (
         <Section title="Analytics summary" hint="Live event counts from landing page.">
           <div className="flex flex-wrap items-center gap-4">
             <button
@@ -1666,7 +1802,93 @@ export default function AdminDashboard() {
             </div>
           )}
         </Section>
+        )}
 
+        {canManageOrders && (
+        <Section title="UTM attribution" hint="Revenue by campaign/source.">
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold"
+              onClick={loadUtmSummary}
+            >
+              Refresh UTM
+            </button>
+          </div>
+          <div className="space-y-2 text-sm text-slate-600">
+            {utmSummary.map((row) => (
+              <div key={`${row.source}-${row.campaign}`} className="rounded-2xl border border-slate-200 bg-white p-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs text-slate-500">Source: {row.source || "direct"}</div>
+                  <div className="font-semibold">{row.campaign || "no-campaign"}</div>
+                </div>
+                <div className="text-sm">Orders: {row.orders}</div>
+                <div className="text-sm font-semibold">Revenue: BDT {row.revenue}</div>
+              </div>
+            ))}
+            {!utmSummary.length && <div className="text-slate-500">No UTM data yet.</div>}
+          </div>
+        </Section>
+        )}
+
+        {canManageOrders && (
+        <Section title="Abandoned checkouts" hint="Follow-up via SMS/WhatsApp.">
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold"
+              onClick={loadAbandoned}
+            >
+              Refresh abandoned
+            </button>
+          </div>
+          <div className="space-y-3">
+            {abandoned.map((row) => (
+              <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="text-sm font-semibold">{row.name || "Guest"} • {row.phone || row.email}</div>
+                <div className="text-xs text-slate-500">Value: BDT {row.total || 0}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+                    onClick={async () => {
+                      await fetch("/api/admin/abandoned-notify", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                        body: JSON.stringify({ id: row.id, channel: "sms" })
+                      });
+                    }}
+                    disabled={!canManageOrders}
+                  >
+                    Send SMS
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+                    onClick={async () => {
+                      const response = await fetch("/api/admin/abandoned-notify", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                        body: JSON.stringify({ id: row.id, channel: "whatsapp" })
+                      });
+                      const data = (await response.json().catch(() => ({}))) as { waUrl?: string };
+                      if (data.waUrl) {
+                        window.open(data.waUrl, "_blank");
+                      }
+                    }}
+                    disabled={!canManageOrders}
+                  >
+                    WhatsApp
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!abandoned.length && <div className="text-slate-500">No abandoned checkouts.</div>}
+          </div>
+        </Section>
+        )}
+
+        {canManageOrders && (
         <Section title="Audit log" hint="See changes and restore previous versions.">
           <div className="flex flex-wrap items-center gap-4">
             <button
@@ -1709,6 +1931,53 @@ export default function AdminDashboard() {
             ))}
           </div>
         </Section>
+        )}
+
+        {canManageUsers && (
+        <Section title="Access control" hint="Manage staff access levels.">
+          <div className="space-y-3">
+            {adminUsers.map((user) => (
+              <div key={user.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">{user.email}</div>
+                  <div className="text-xs text-slate-500">Role: {user.role}</div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={user.role}
+                    onChange={(e) => {
+                      const next = adminUsers.map((item) =>
+                        item.id === user.id ? { ...item, role: e.target.value } : item
+                      );
+                      setAdminUsers(next);
+                    }}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                  >
+                    <option value="owner">Owner</option>
+                    <option value="admin">Admin</option>
+                    <option value="staff">Staff</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+                    onClick={async () => {
+                      await fetch("/api/admin/users", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                        body: JSON.stringify({ id: user.id, role: user.role })
+                      });
+                      loadUsers();
+                    }}
+                  >
+                    Save role
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!adminUsers.length && <div className="text-slate-500">No users found.</div>}
+          </div>
+        </Section>
+        )}
       </div>
     </div>
   );

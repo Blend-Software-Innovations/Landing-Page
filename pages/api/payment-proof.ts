@@ -151,7 +151,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         deviceFingerprint: payload.deviceFingerprint || undefined,
         fraudFlags: fraud.flags,
         fraudScore: fraud.score,
-        paidAmount: paidAmount || undefined
+        paidAmount: paidAmount || undefined,
+        utm: payload.utm || undefined
       });
       if (manualStatus === "VERIFIED") {
         await updateOrderStatus(order.id, "CONFIRMED", { role: "system" as any });

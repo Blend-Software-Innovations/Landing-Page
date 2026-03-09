@@ -110,7 +110,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     deviceFingerprint: payload.deviceFingerprint || "",
     fraudFlags: fraud.flags,
     fraudScore: fraud.score,
-    paymentProvider: provider.toUpperCase()
+    paymentProvider: provider.toUpperCase(),
+    utm: payload.utm || undefined
   });
 
   const link = buildPaymentLink(

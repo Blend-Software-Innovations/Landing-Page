@@ -102,6 +102,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     deviceFingerprint: payload.deviceFingerprint || undefined,
     fraudFlags: fraud.flags,
     fraudScore: fraud.score,
+    utm: payload.utm || undefined,
     productId: payload.productId || "",
     variantId: payload.variantId || "",
     quantity: Number(payload.quantity || 1),

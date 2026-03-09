@@ -11,10 +11,13 @@ export type AdminPermission =
   | "media:write"
   | "orders:read"
   | "orders:write"
+  | "orders:pack"
   | "inventory:read"
   | "inventory:write"
   | "analytics:read"
-  | "audit:read";
+  | "audit:read"
+  | "users:read"
+  | "users:write";
 
 const rolePermissions: Record<Exclude<AdminRole, "none">, AdminPermission[]> = {
   owner: [
@@ -36,12 +39,15 @@ const rolePermissions: Record<Exclude<AdminRole, "none">, AdminPermission[]> = {
     "media:write",
     "orders:read",
     "orders:write",
+    "orders:pack",
     "inventory:read",
     "inventory:write",
     "analytics:read",
-    "audit:read"
+    "audit:read",
+    "users:read",
+    "users:write"
   ],
-  staff: ["config:read", "media:read", "orders:read", "inventory:read", "analytics:read", "audit:read"]
+  staff: ["config:read", "media:read", "orders:read", "orders:pack", "inventory:read", "analytics:read", "audit:read"]
 };
 
 const encoder = new TextEncoder();

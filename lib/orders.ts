@@ -26,6 +26,13 @@ export type OrderPayload = {
   fraudFlags?: string[];
   fraudScore?: number;
   paidAmount?: number;
+  utm?: {
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    content?: string;
+    term?: string;
+  };
   productId?: string;
   variantId?: string;
   quantity: number;
@@ -115,6 +122,11 @@ export async function createOrder(payload: OrderPayload) {
       fraudFlags: payload.fraudFlags?.length ? payload.fraudFlags : null,
       fraudScore: payload.fraudScore || 0,
       paidAmount: payload.paidAmount || null,
+      utmSource: payload.utm?.source || null,
+      utmMedium: payload.utm?.medium || null,
+      utmCampaign: payload.utm?.campaign || null,
+      utmContent: payload.utm?.content || null,
+      utmTerm: payload.utm?.term || null,
       reservationId: payload.reservationId || null,
       reservationIds: payload.reservationIds?.length ? payload.reservationIds : null,
       items: {

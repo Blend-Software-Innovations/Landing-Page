@@ -6,7 +6,7 @@ import { publicRateLimitPerMin } from "../../lib/env";
 import { applyCors } from "../../lib/cors";
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
-const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-01-28.clover" }) : null;
+const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-02-25.clover" }) : null;
 
 const twilioSid = process.env.TWILIO_SID || "";
 const twilioAuth = process.env.TWILIO_AUTH || "";

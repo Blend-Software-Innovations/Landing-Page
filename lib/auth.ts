@@ -91,6 +91,19 @@ export function findUserById(id: string) {
   return users.find((u) => u.id === id) || null;
 }
 
+export async function listUsers() {
+  return readUsers().map((u) => ({ id: u.id, email: u.email, role: u.role }));
+}
+
+export async function updateUserRole(id: string, role: "owner" | "admin" | "staff") {
+  const users = readUsers();
+  const user = users.find((u) => u.id === id);
+  if (!user) return null;
+  user.role = role;
+  writeUsers(users);
+  return { id: user.id, email: user.email, role: user.role };
+}
+
 export async function issueTokens(user: UserRecord) {
   const accessSecret = requireAccessSecret();
   const refreshSecret = requireRefreshSecret();

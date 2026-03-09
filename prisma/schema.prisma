@@ -141,6 +141,11 @@ model Order {
   callStatus      String?
   callNotes       String?
   callVerifiedAt  DateTime?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  utmContent      String?
+  utmTerm         String?
   items           OrderItem[]
   confirmedAt     DateTime?
   packedAt        DateTime?
@@ -188,6 +193,25 @@ model AuditLog {
   data      Json?
   createdAt DateTime @default(now())
 
+  @@index([createdAt])
+}
+
+model AbandonedCheckout {
+  id            String   @id @default(cuid())
+  name          String?
+  email         String?
+  phone         String?
+  total         Int?
+  items         Json?
+  utm           Json?
+  status        String   @default("PENDING")
+  notifyCount   Int      @default(0)
+  lastNotifiedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([phone])
+  @@index([status])
   @@index([createdAt])
 }
 

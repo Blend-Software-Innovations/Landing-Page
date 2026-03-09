@@ -54,6 +54,10 @@ export async function saveConfig(
 ) {
   const current = await getConfig();
   const changed = JSON.stringify(current) !== JSON.stringify(config);
+  const priceChanged =
+    current.priceBdt !== config.priceBdt ||
+    JSON.stringify(current.priceModifiers || {}) !== JSON.stringify(config.priceModifiers || {}) ||
+    JSON.stringify(current.variants || []) !== JSON.stringify(config.variants || []);
   if (changed && !meta?.skipAudit) {
     await appendAudit({
       actor: meta?.actor,
@@ -62,6 +66,21 @@ export async function saveConfig(
       note: meta?.note,
       data: current
     });
+    if (priceChanged) {
+      try {
+        const prisma = getPrisma() as any;
+        await prisma.auditLog.create({
+          data: {
+            actor: meta?.actor || null,
+            role: meta?.role || null,
+            action: "price.update",
+            data: { before: { priceBdt: current.priceBdt }, after: { priceBdt: config.priceBdt } }
+          }
+        });
+      } catch (error) {
+        console.error("Failed to write price audit", error);
+      }
+    }
   }
   const pool = getPool();
   if (pool) {

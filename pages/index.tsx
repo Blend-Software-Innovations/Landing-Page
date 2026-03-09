@@ -319,7 +319,8 @@ function Countdown({ endDate }: { endDate: string }) {
 
 function trackEvent(name: string, payload?: Record<string, unknown>) {
   if (typeof window === "undefined") return;
-  const body = JSON.stringify({ name, payload: payload || {} });
+  const utm = getStoredUtm();
+  const body = JSON.stringify({ name, payload: { ...(payload || {}), utm } });
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "application/json" });
     navigator.sendBeacon("/api/analytics", blob);
@@ -333,10 +334,21 @@ function hasMarketingConsent() {
   return window.localStorage.getItem("marketing_consent") === "granted";
 }
 
+function getStoredUtm() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem("utm_data");
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
   function fireMarketingEvent(name: string, params?: Record<string, unknown>) {
   if (typeof window === "undefined") return;
   if (!hasMarketingConsent()) return;
-  const payload = params || {};
+  const payload = { ...(params || {}), utm: getStoredUtm() };
+  const eventId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   const dataLayer = (window as any).dataLayer;
   if (Array.isArray(dataLayer)) {
     dataLayer.push({ event: name, ...payload });
@@ -355,13 +367,13 @@ function hasMarketingConsent() {
     };
     const fbEvent = fbEventMap[name];
     if (fbEvent) {
-      fbq("track", fbEvent, payload);
+      fbq("track", fbEvent, payload, { eventID: eventId });
     }
   }
   fetch("/api/capi", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event: name, payload })
+    body: JSON.stringify({ event: name, eventId, payload })
   }).catch(() => undefined);
 }
 
@@ -426,6 +438,21 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   useEffect(() => {
     if (typeof window === "undefined") return;
     setMarketingConsent(hasMarketingConsent());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const utm = {
+      source: params.get("utm_source") || "",
+      medium: params.get("utm_medium") || "",
+      campaign: params.get("utm_campaign") || "",
+      content: params.get("utm_content") || "",
+      term: params.get("utm_term") || ""
+    };
+    if (Object.values(utm).some(Boolean)) {
+      window.localStorage.setItem("utm_data", JSON.stringify(utm));
+    }
   }, []);
 
   useEffect(() => {
@@ -704,6 +731,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
       shippingPartner: courierPartner,
       deliveryZone,
       paymentMethod,
+      utm: getStoredUtm(),
       productId: featureFlags.multiProductEnabled ? (selectedProductId || activeProduct?.id || "") : "",
       selectedOptions,
       variantId: selectedVariant?.sku || "",
@@ -758,6 +786,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     fireMarketingEvent("begin_checkout", {
       currency: "BDT",
       value: total,
+      name: payload.name,
       email: payload.email,
       phone: payload.phone,
       sourceUrl: typeof window !== "undefined" ? window.location.href : "",

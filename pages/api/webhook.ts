@@ -13,7 +13,7 @@ import { detectFraud } from "../../lib/fraud";
 export const config = { api: { bodyParser: false } };
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
-const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-01-28.clover" }) : null;
+const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-02-25.clover" }) : null;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
 const twilioSid = process.env.TWILIO_SID || "";
@@ -117,6 +117,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       deviceFingerprint: meta.deviceFingerprint || undefined,
       fraudFlags: fraud.flags,
       fraudScore: fraud.score,
+      utm: meta.utm ? JSON.parse(meta.utm) : undefined,
       productId: meta.productId || "",
       variantId: meta.variantId || "",
       quantity: Number(meta.quantity || 1),
