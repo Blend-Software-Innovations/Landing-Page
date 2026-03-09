@@ -127,6 +127,7 @@ model Order {
   manualReviewedAt DateTime?
   manualReviewNote String?
   transactionId   String?
+  idempotencyKey  String?       @unique
   reservationId   String?       @unique
   reservation     InventoryHold? @relation(fields: [reservationId], references: [id])
   reservationIds  Json?
