@@ -8,7 +8,7 @@ import { getConfig } from "../../lib/siteConfig.server";
 import { validateOtpToken } from "../../lib/otp";
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
-const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-02-25.clover" }) : null;
+const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-01-28.clover" }) : null;
 
 function normalizePhone(input: string) {
   const digits = input.replace(/\D/g, "");

@@ -50,7 +50,6 @@ export type OrderPayload = {
   }>;
   actor?: string;
   role?: string;
-  utm?: Record<string, string>;
 };
 
 export type OrderStatus =
