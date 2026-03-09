@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 ﻿import fs from "fs";
 import path from "path";
 import { getPool } from "./db";
@@ -46,7 +47,7 @@ export async function appendAudit(entry: Omit<AuditEntry, "id" | "createdAt" | "
       );
       return;
     } catch (error) {
-      console.error("Failed to save audit log to database", error);
+      logger.error({ err: error }, "Failed to save audit log to database");
     }
   }
 
@@ -92,7 +93,7 @@ export async function getAuditLog(limit = 20): Promise<Omit<AuditEntry, "data">[
         })
       );
     } catch (error) {
-      console.error("Failed to load audit log from database", error);
+      logger.error({ err: error }, "Failed to load audit log from database");
     }
   }
 
@@ -121,7 +122,7 @@ export async function getAuditEntry(id: string): Promise<AuditEntry | null> {
         data: row.data as SiteConfig
       };
     } catch (error) {
-      console.error("Failed to load audit entry from database", error);
+      logger.error({ err: error }, "Failed to load audit entry from database");
     }
   }
 

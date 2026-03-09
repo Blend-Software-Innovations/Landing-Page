@@ -1,3 +1,4 @@
+import { logger } from "../../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import formidable from "formidable";
 import os from "os";
@@ -15,7 +16,7 @@ export const config = {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const role = await resolveRole(req);
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`admin-upload:${ip}`, adminRateLimitPerMin, 60_000)) {
+  if (await isRateLimited(`admin-upload:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many uploads. Please try again shortly." });
   }
 
@@ -50,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const result = await uploadImage(file.filepath, file.originalFilename || "upload.jpg", "public");
       return res.status(200).json({ url: result.url, provider: result.provider });
     } catch (uploadError) {
-      console.error("Upload failed", uploadError);
+      logger.error({ err: uploadError }, "Upload failed");
       return res.status(500).json({ error: "Upload failed. Check storage configuration." });
     }
   });

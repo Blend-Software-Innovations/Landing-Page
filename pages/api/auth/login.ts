@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`auth-login:${ip}`, authRateLimitPerMin, 60_000)) {
+  if (await isRateLimited(`auth-login:${ip}`, authRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many attempts" });
   }
 

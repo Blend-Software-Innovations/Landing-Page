@@ -1,3 +1,4 @@
+import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 import fs from "fs";
@@ -37,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`webhook:${ip}`, publicRateLimitPerMin, 60_000)) {
+  if (await isRateLimited(`webhook:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
 
@@ -57,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     event = stripe.webhooks.constructEvent(raw, sig, webhookSecret);
   } catch (error) {
-    console.error("Webhook signature verification failed", error);
+    logger.error({ err: error }, "Webhook signature verification failed");
     return res.status(400).json({ error: "Invalid signature" });
   }
 
@@ -147,7 +148,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             : "Payment confirmed. We will process your order soon."
         });
       } catch (error) {
-        console.error("Twilio webhook send failed", error);
+        logger.error({ err: error }, "Twilio webhook send failed");
       }
     }
   }

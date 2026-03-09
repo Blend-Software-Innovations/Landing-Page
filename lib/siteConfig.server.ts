@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 ﻿import type { SiteConfig, Review, OptionGroup, GalleryItem, Experiment, ExperimentVariant } from "./siteConfig";
 import { defaultConfig } from "./siteConfig";
 import fs from "fs";
@@ -35,7 +36,7 @@ export async function getConfig(): Promise<SiteConfig> {
           return deepMerge(defaultConfig, result.rows[0].data as Partial<SiteConfig>);
         }
       } catch (error) {
-        console.error("Failed to load config from database", error);
+        logger.error({ err: error }, "Failed to load config from database");
       }
     }
 
@@ -118,12 +119,12 @@ export async function saveConfig(
             });
           }
         } catch (error) {
-          console.error("Failed to sync variants to database", error);
+          logger.error({ err: error }, "Failed to sync variants to database");
         }
       }
       return;
     } catch (error) {
-      console.error("Failed to save config to database", error);
+      logger.error({ err: error }, "Failed to save config to database");
     }
   }
 

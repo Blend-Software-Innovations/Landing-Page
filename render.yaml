@@ -12,6 +12,11 @@ services:
         fromDatabase:
           name: pen-landing-db
           property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: pen-landing-redis
+          type: redis
+          property: connectionString
       - key: NEXT_PUBLIC_SITE_URL
         value: ""
         sync: false
@@ -43,7 +48,23 @@ services:
       - key: TWILIO_PHONE
         value: ""
         sync: false
+      - key: SENTRY_DSN
+        value: ""
+        sync: false
+      - key: NEXT_PUBLIC_SENTRY_DSN
+        value: ""
+        sync: false
 
 databases:
   - name: pen-landing-db
     plan: starter
+    # Render managed PostgreSQL: automatic daily backups on paid plans.
+    # Free/starter tier: run scripts/backup.sh manually or schedule via cron.
+    # Restore: psql $DATABASE_URL < backup.sql (after gunzip)
+
+# Redis: distributed rate limiting across instances
+# Safe to remove if running single-instance (in-memory fallback is automatic)
+  - type: redis
+    name: pen-landing-redis
+    plan: starter
+    maxmemoryPolicy: noeviction

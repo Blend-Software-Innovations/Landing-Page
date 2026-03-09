@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const role = await resolveRole(req);
   if (!hasPermission(role, "inventory:write")) return res.status(401).json({ error: "Unauthorized" });
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (isRateLimited(`admin-holds-release:${ip}`, adminRateLimitPerMin, 60_000)) {
+  if (await isRateLimited(`admin-holds-release:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
   if (req.method !== "POST") {
