@@ -46,7 +46,6 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "autoprefixer": "latest",
-    "@types/pino": "^9",
     "eslint": "^10.0.1",
     "pino-pretty": "^13",
     "eslint-config-next": "latest",
