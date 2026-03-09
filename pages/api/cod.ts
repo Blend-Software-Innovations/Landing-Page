@@ -1,4 +1,4 @@
-﻿import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest, NextApiResponse } from "next";
 import fs from "fs";
 import path from "path";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
@@ -8,6 +8,7 @@ import { createOrder } from "../../lib/orders";
 import { getConfig } from "../../lib/siteConfig.server";
 import { validateOtpToken } from "../../lib/otp";
 import { detectFraud } from "../../lib/fraud";
+import { getPrisma } from "../../lib/prisma";
 
 const dataPath = path.join(process.cwd(), "data", "cod.jsonl");
 
@@ -30,6 +31,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const payload = req.body || {};
+
+  // --- Idempotency: if client sent a key and we already processed it, return early ---
+  const idempotencyKey = String(payload.idempotencyKey || "").trim() || null;
+  if (idempotencyKey) {
+    const prisma = getPrisma() as any;
+    const existing = await prisma.order.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      return res.status(200).json({ status: "ok", orderId: existing.id, idempotent: true });
+    }
+  }
+
   const otpToken = String(payload.otpToken || "");
   const config = await getConfig();
   if (config.features?.otpEnabled) {
@@ -38,6 +50,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: "OTP verification required" });
     }
   }
+
+  // --- Fraud check BEFORE reserving inventory ---
+  const fraud = await detectFraud({
+    phone: payload.phone || "",
+    deviceFingerprint: payload.deviceFingerprint || "",
+    transactionId: payload.transactionId || ""
+  });
+  if (fraud.flags.includes("txn_duplicate")) {
+    return res.status(409).json({ error: "Duplicate transaction ID" });
+  }
+
   const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
   const items = itemsRaw.length
     ? itemsRaw.map((item: any) => ({
@@ -83,12 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     reservationIds,
     createdAt: new Date().toISOString()
   };
-  const fraud = await detectFraud({
-    phone: payload.phone || "",
-    deviceFingerprint: payload.deviceFingerprint || "",
-    transactionId: payload.transactionId || ""
-  });
-  await createOrder({
+  const order = await createOrder({
     customerName: payload.name || "",
     phone: payload.phone || "",
     address: payload.address || "",
@@ -98,10 +116,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     paymentMethod: "COD",
     paymentStatus: "UNPAID",
     transactionId: payload.transactionId || undefined,
+    idempotencyKey: idempotencyKey || undefined,
     shippingPartner: payload.shippingPartner || undefined,
     deviceFingerprint: payload.deviceFingerprint || undefined,
     fraudFlags: fraud.flags,
     fraudScore: fraud.score,
+    utm: payload.utm || undefined,
     productId: payload.productId || "",
     variantId: payload.variantId || "",
     quantity: Number(payload.quantity || 1),
@@ -112,5 +132,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   fs.mkdirSync(path.dirname(dataPath), { recursive: true });
   fs.appendFileSync(dataPath, `${JSON.stringify(record)}\n`);
-  return res.status(200).json({ status: "ok" });
+  return res.status(200).json({ status: "ok", orderId: order.id });
 }

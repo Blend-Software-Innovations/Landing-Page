@@ -67,6 +67,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const meta = session.metadata || {};
+    const stripeTransactionId = session.payment_intent ? String(session.payment_intent) : "";
+
+    // Idempotency guard: Stripe can retry webhooks — skip if already processed
+    if (stripeTransactionId) {
+      const { getPrisma } = await import("../../lib/prisma");
+      const prisma = getPrisma() as any;
+      const existing = await prisma.order.findFirst({ where: { transactionId: stripeTransactionId } });
+      if (existing) {
+        return res.status(200).json({ received: true });
+      }
+    }
+
     const reservationIds = meta.reservationIds ? meta.reservationIds.split(",").filter(Boolean) : [];
     for (const id of reservationIds) {
       await commitInventory(id);
@@ -74,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const fraud = await detectFraud({
       phone: meta.phone || "",
       deviceFingerprint: meta.deviceFingerprint || "",
-      transactionId: session.payment_intent ? String(session.payment_intent) : ""
+      transactionId: stripeTransactionId
     });
     let cartItems: Array<any> = [];
     if (meta.cart) {
@@ -112,7 +124,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       total: Number(session.amount_total || 0) / 100 || 0,
       paymentMethod: "STRIPE",
       paymentStatus: "PAID",
-      transactionId: session.payment_intent ? String(session.payment_intent) : undefined,
+      transactionId: stripeTransactionId || undefined,
       shippingPartner: meta.shippingPartner || undefined,
       deviceFingerprint: meta.deviceFingerprint || undefined,
       fraudFlags: fraud.flags,

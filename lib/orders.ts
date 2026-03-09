@@ -14,6 +14,7 @@ export type OrderPayload = {
   paymentMethod: string;
   paymentStatus: string;
   transactionId?: string;
+  idempotencyKey?: string;
   manualStatus?: "PENDING" | "VERIFIED" | "REJECTED";
   manualProofUrl?: string;
   manualSubmittedAt?: string;
@@ -103,6 +104,7 @@ export async function createOrder(payload: OrderPayload) {
       paymentMethod: payload.paymentMethod,
       paymentStatus: payload.paymentStatus,
       transactionId: payload.transactionId || null,
+      idempotencyKey: payload.idempotencyKey || null,
       manualStatus: payload.manualStatus || null,
       manualProofUrl: payload.manualProofUrl || null,
       manualSubmittedAt: payload.manualSubmittedAt ? new Date(payload.manualSubmittedAt) : null,
