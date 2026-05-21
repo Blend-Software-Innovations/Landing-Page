@@ -11,9 +11,13 @@ export function pgSsl(url: string): false | { ca?: string; rejectUnauthorized: b
   if (/sslmode=disable/.test(url)) return false;
   if (/@(localhost|127\.0\.0\.1)[:/]/.test(url)) return false;
   const ca = process.env.DATABASE_CA_CERT;
-  if (ca) return { ca, rejectUnauthorized: true };
-  // No CA provided: verify against the system trust store. For DO Managed PG this means
-  // DATABASE_CA_CERT must be set, otherwise the connection fails (rather than skipping verification).
+  if (ca && ca.includes("BEGIN CERTIFICATE")) return { ca, rejectUnauthorized: true };
+  // Opt-in escape hatch for DBs that don't expose a CA cert (e.g. DO dev databases): keep the
+  // connection encrypted but skip certificate verification. Safe only when the DB is reachable
+  // solely over a trusted private network with restricted sources. For production, use a managed
+  // DB and provide DATABASE_CA_CERT so the chain is verified instead.
+  if (process.env.DATABASE_SSL_NO_VERIFY === "true") return { rejectUnauthorized: false };
+  // Default: verify against the system trust store (fails clearly if a hosted CA cert is needed).
   return { rejectUnauthorized: true };
 }
 

@@ -23,6 +23,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_FB_PIXEL_ID: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   DATABASE_CA_CERT: z.string().optional(),
+  DATABASE_SSL_NO_VERIFY: z.string().optional(),
   DISABLE_DB: z.string().optional(),
   CONFIG_ID: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
