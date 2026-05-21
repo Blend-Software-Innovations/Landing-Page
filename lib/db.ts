@@ -21,6 +21,22 @@ export function pgSsl(url: string): false | { ca?: string; rejectUnauthorized: b
   return { rejectUnauthorized: true };
 }
 
+// Strip ssl-related params from the connection string so our explicit `ssl` config (pgSsl) is the
+// single source of truth for TLS. Otherwise pg-connection-string interprets sslmode=require as
+// verify-full and overrides our settings (causing SELF_SIGNED_CERT_IN_CHAIN against hosted DBs).
+export function pgConnectionString(url: string): string {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    for (const p of ["sslmode", "ssl", "sslrootcert", "sslcert", "sslkey"]) {
+      u.searchParams.delete(p);
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export function isDbAvailable() {
   const url = process.env.DATABASE_URL || "";
   if (!url) return false;
@@ -33,7 +49,7 @@ export function getPool(): any | null {
   const url = process.env.DATABASE_URL || "";
   if (!isDbAvailable()) return null;
   if (!pool) {
-    pool = new Pool({ connectionString: url, ssl: pgSsl(url) });
+    pool = new Pool({ connectionString: pgConnectionString(url), ssl: pgSsl(url) });
   }
   return pool;
 }
