@@ -407,6 +407,8 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
   const [otpCooldownRemaining, setOtpCooldownRemaining] = useState(0);
   const [deliveryZone, setDeliveryZone] = useState<"insideDhaka" | "outsideDhaka">("insideDhaka");
+  const [deliveryArea, setDeliveryArea] = useState("");
+  const [deliverySlot, setDeliverySlot] = useState("");
   const [courierPartner, setCourierPartner] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -586,7 +588,10 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const totalWeight = cart.length
     ? cart.reduce((sum, item) => sum + item.weightPerUnit * item.quantity, 0)
     : currentItem.weightPerUnit * currentItem.quantity;
+  const selectedAreaCfg = (displayConfig.deliveryAreas || []).find((a) => a.name === deliveryArea);
   const rawShippingFee = (() => {
+    // A chosen delivery area overrides the inside/outside-Dhaka zone fee.
+    if (selectedAreaCfg) return selectedAreaCfg.fee;
     const rules = displayConfig.shippingRules;
     if (rules?.enabled && rules.tiers?.length) {
       const sorted = [...rules.tiers].sort((a, b) => a.maxWeight - b.maxWeight);
@@ -603,6 +608,8 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const shippingFee = freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty ? 0 : rawShippingFee;
   const discount = effectiveSubtotal >= 10000 || totalQuantity >= 3 ? Math.round(effectiveSubtotal * 0.05) : 0;
   const total = effectiveSubtotal + giftWrapFee + shippingFee - discount;
+  const minOrderValue = selectedAreaCfg?.minOrder ?? displayConfig.minOrderValue ?? 0;
+  const belowMinOrder = minOrderValue > 0 && effectiveSubtotal < minOrderValue;
 
   const variantOutOfStock = selectedVariant ? selectedVariant.stockQty <= 0 : false;
   const orderDisabled =
@@ -720,6 +727,8 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
       address: String(formData.get("address") || "").trim(),
       city: String(formData.get("city") || "").trim(),
       area: String(formData.get("area") || "").trim(),
+      deliveryArea,
+      deliverySlot,
         note: String(formData.get("note") || "").trim(),
       transactionId: String(formData.get("transactionId") || "").trim(),
       paidAmount: Number(String(formData.get("paidAmount") || "0")) || 0,
@@ -772,6 +781,15 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
     }
     if (!payload.address || !payload.city) {
       setError(t.addressFieldsError);
+      setLoading(false);
+      return;
+    }
+    if (belowMinOrder) {
+      setError(
+        lang === "bn"
+          ? `এই এলাকায় সর্বনিম্ন অর্ডার ৳${minOrderValue}।`
+          : `Minimum order for this area is ৳${minOrderValue}.`
+      );
       setLoading(false);
       return;
     }
@@ -1229,6 +1247,45 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                       <option value="outsideDhaka">{t.deliveryOutside}</option>
                     </select>
                   </div>
+                  {(displayConfig.deliveryAreas?.length || displayConfig.deliverySlots?.length) ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {displayConfig.deliveryAreas?.length ? (
+                        <select
+                          value={deliveryArea}
+                          onChange={(e) => setDeliveryArea(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-4 py-3"
+                        >
+                          <option value="">{lang === "bn" ? "ডেলিভারি এলাকা বাছুন" : "Select delivery area"}</option>
+                          {displayConfig.deliveryAreas.map((a) => (
+                            <option key={a.name} value={a.name}>
+                              {a.name} (৳{a.fee}{a.minOrder ? `, min ৳${a.minOrder}` : ""})
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {displayConfig.deliverySlots?.length ? (
+                        <select
+                          value={deliverySlot}
+                          onChange={(e) => setDeliverySlot(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-4 py-3"
+                        >
+                          <option value="">{lang === "bn" ? "ডেলিভারি সময় বাছুন" : "Select delivery time"}</option>
+                          {displayConfig.deliverySlots.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {belowMinOrder && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+                      {lang === "bn"
+                        ? `এই এলাকায় সর্বনিম্ন অর্ডার ৳${minOrderValue}।`
+                        : `Minimum order for this area is ৳${minOrderValue}.`}
+                    </div>
+                  )}
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                     {optionGroups.map((group) => (
                       <div key={group.id}>
