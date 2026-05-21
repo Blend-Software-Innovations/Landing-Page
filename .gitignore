@@ -1,5 +1,9 @@
 ﻿# dependencies
 node_modules/
+# Lockfile is intentionally not committed: it is generated on Windows here and the buildpack
+# (Linux) needs to resolve platform-specific deps itself. Direct deps are pinned in package.json
+# for reproducibility, and the host runs `npm install` (not `npm ci`).
+package-lock.json
 
 # next
 .next/
