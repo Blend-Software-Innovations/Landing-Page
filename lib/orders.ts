@@ -10,6 +10,8 @@ export type OrderPayload = {
   address: string;
   city: string;
   area?: string;
+  deliveryArea?: string;
+  deliverySlot?: string;
   total: number;
   paymentMethod: string;
   paymentStatus: string;
@@ -107,6 +109,8 @@ export async function createOrder(payload: OrderPayload) {
       address: payload.address,
       city: payload.city,
       area: payload.area || null,
+      deliveryArea: payload.deliveryArea || null,
+      deliverySlot: payload.deliverySlot || null,
       total: payload.total,
       paymentMethod: payload.paymentMethod,
       paymentStatus: payload.paymentStatus,
@@ -198,6 +202,12 @@ export async function updateOrderStatus(
             where: { id: hold.variantId },
             data: { stockQty: { increment: hold.quantity } }
           });
+          // Restore the FIFO batch quantities this hold had consumed.
+          const allocations = Array.isArray(hold.batchAllocations) ? hold.batchAllocations : [];
+          for (const a of allocations as Array<{ batchId: string; qty: number }>) {
+            if (!a?.batchId || !a?.qty) continue;
+            await tx.batch.updateMany({ where: { id: a.batchId }, data: { quantity: { increment: a.qty } } });
+          }
         }
         if (holds.length) {
           await tx.inventoryHold.deleteMany({ where: { id: { in: holds.map((h: any) => h.id) } } });

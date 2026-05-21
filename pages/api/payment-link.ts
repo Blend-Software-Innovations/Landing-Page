@@ -76,6 +76,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       ];
 
+  // --- Minimum order value (area-specific or global) ---
+  const deliveryArea = String(payload.deliveryArea || "");
+  const deliverySlot = String(payload.deliverySlot || "");
+  const areaCfg = config.deliveryAreas?.find((a) => a.name === deliveryArea);
+  const minOrder = areaCfg?.minOrder ?? config.minOrderValue ?? 0;
+  const goodsSubtotal = items.reduce(
+    (sum: number, it: any) => sum + Number(it.unitPrice || 0) * Number(it.quantity || 0),
+    0
+  );
+  if (minOrder > 0 && goodsSubtotal < minOrder) {
+    return res.status(400).json({ error: `Minimum order is ${minOrder} for ${deliveryArea || "this area"}` });
+  }
+
   const reservationIds: string[] = [];
   const resolvedItems = [];
   for (const item of items) {
@@ -113,6 +126,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     paymentMethod: provider.toUpperCase(),
     paymentStatus: "UNPAID",
     idempotencyKey: idempotencyKey || undefined,
+    deliveryArea: deliveryArea || undefined,
+    deliverySlot: deliverySlot || undefined,
     productId: payload.productId || "",
     variantId: payload.variantId || "",
     quantity: Number(payload.quantity || 1),

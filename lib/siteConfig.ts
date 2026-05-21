@@ -104,6 +104,9 @@ export type SiteConfig = {
     }>;
   };
   freeDeliveryThresholdQty: number;
+  deliveryAreas: Array<{ name: string; fee: number; minOrder?: number }>;
+  minOrderValue: number;
+  deliverySlots: string[];
   optionGroups: OptionGroup[];
   recommended: Record<string, string[]>;
   productFeatures: string[];
@@ -289,6 +292,13 @@ export const defaultConfig: SiteConfig = {
     ]
   },
   freeDeliveryThresholdQty: 2,
+  deliveryAreas: [
+    { name: "Dhanmondi", fee: 60, minOrder: 300 },
+    { name: "Mirpur", fee: 80, minOrder: 300 },
+    { name: "Uttara", fee: 100, minOrder: 500 }
+  ],
+  minOrderValue: 0,
+  deliverySlots: ["9 AM – 12 PM", "12 PM – 3 PM", "3 PM – 6 PM", "6 PM – 9 PM"],
   optionGroups: [
     {
       id: "option-a",
@@ -417,10 +427,10 @@ export const defaultConfig: SiteConfig = {
     }
   ],
   features: {
-    inventoryEnabled: false,
+    inventoryEnabled: true,
     variantImagesEnabled: false,
-    multiProductEnabled: false,
-    categoriesEnabled: false,
+    multiProductEnabled: true,
+    categoriesEnabled: true,
     otpEnabled: false
   },
   otpSettings: {

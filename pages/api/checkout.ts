@@ -78,6 +78,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         ];
 
+    // --- Minimum order value (area-specific or global) ---
+    const deliveryArea = String(body.deliveryArea || "");
+    const deliverySlot = String(body.deliverySlot || "");
+    const areaCfg = config.deliveryAreas?.find((a) => a.name === deliveryArea);
+    const minOrder = areaCfg?.minOrder ?? config.minOrderValue ?? 0;
+    const goodsSubtotal = items.reduce((s, it) => s + Number(it.unitPrice || 0) * Number(it.quantity || 0), 0);
+    if (minOrder > 0 && goodsSubtotal < minOrder) {
+      return res.status(400).json({ error: `Minimum order is ${minOrder} for ${deliveryArea || "this area"}` });
+    }
+
     const reservationIds: string[] = [];
     for (const item of items) {
       if (!item.variantId) continue;
@@ -155,6 +165,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         address: String(body.address || ""),
         city: String(body.city || ""),
         area: String(body.area || ""),
+        deliveryArea,
+        deliverySlot,
         note: String(body.note || ""),
         quantity: String(quantity),
         giftWrap: String(body.giftWrap || false),

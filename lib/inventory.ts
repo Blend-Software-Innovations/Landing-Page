@@ -1,4 +1,4 @@
-﻿import { nanoid } from "nanoid";
+import { nanoid } from "nanoid";
 import { getPrisma } from "./prisma";
 
 const HOLD_TTL_MINUTES = 15;
@@ -13,6 +13,35 @@ async function resolveVariantId(variantIdOrSku: string) {
   return bySku?.id || null;
 }
 
+// FIFO: consume from batches with the earliest expiry first (undated batches last). Returns the
+// allocations so they can be restored exactly if the hold is released. If a variant has no batch
+// records, returns [] and only Variant.stockQty is tracked (backward compatible).
+async function allocateBatchesFifo(tx: any, variantId: string, quantity: number) {
+  const batches: any[] = await tx.batch.findMany({
+    where: { variantId, quantity: { gt: 0 } },
+    orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }, { receivedDate: "asc" }]
+  });
+  const allocations: Array<{ batchId: string; qty: number }> = [];
+  let remaining = quantity;
+  for (const b of batches) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, b.quantity);
+    if (take <= 0) continue;
+    await tx.batch.update({ where: { id: b.id }, data: { quantity: { decrement: take } } });
+    allocations.push({ batchId: b.id, qty: take });
+    remaining -= take;
+  }
+  return allocations;
+}
+
+async function restoreBatches(tx: any, allocations: any) {
+  if (!Array.isArray(allocations)) return;
+  for (const a of allocations) {
+    if (!a?.batchId || !a?.qty) continue;
+    await tx.batch.updateMany({ where: { id: a.batchId }, data: { quantity: { increment: a.qty } } });
+  }
+}
+
 export async function releaseExpiredHolds() {
   const prisma = getPrisma() as any;
   const now = new Date();
@@ -20,13 +49,13 @@ export async function releaseExpiredHolds() {
     where: { expiresAt: { lt: now } }
   });
   if (!expired.length) return 0;
-  const variantIds = expired.map((item) => item.variantId);
   await prisma.$transaction(async (tx: any) => {
     for (const hold of expired) {
       await tx.variant.update({
         where: { id: hold.variantId },
         data: { stockQty: { increment: hold.quantity } }
       });
+      await restoreBatches(tx, hold.batchAllocations);
     }
     await tx.inventoryHold.deleteMany({ where: { id: { in: expired.map((item: any) => item.id) } } });
   });
@@ -50,12 +79,14 @@ export async function reserveInventory(variantId: string, quantity: number) {
       data: { stockQty: { decrement: quantity } }
     });
     if (result.count === 0) return null;
+    const allocations = await allocateBatchesFifo(tx, resolvedId, quantity);
     await tx.inventoryHold.create({
       data: {
         id: reservationId,
         variantId: resolvedId,
         quantity,
-        expiresAt
+        expiresAt,
+        batchAllocations: allocations.length ? allocations : undefined
       }
     });
     return reservationId;
@@ -86,6 +117,7 @@ export async function releaseInventory(reservationId: string) {
       where: { id: hold.variantId },
       data: { stockQty: { increment: hold.quantity } }
     });
+    await restoreBatches(tx, hold.batchAllocations);
     await tx.inventoryHold.delete({ where: { id: reservationId } });
   });
   return true;
@@ -95,6 +127,7 @@ export async function commitInventory(reservationId: string) {
   const prisma = getPrisma() as any;
   const hold = await prisma.inventoryHold.findUnique({ where: { id: reservationId } });
   if (!hold) return false;
+  // Batches were already decremented at reserve time; committing just drops the hold.
   await prisma.inventoryHold.delete({ where: { id: reservationId } });
   return true;
 }

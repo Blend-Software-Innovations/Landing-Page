@@ -116,6 +116,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       address: meta.address || "",
       city: meta.city || "",
       area: meta.area || "",
+      deliveryArea: meta.deliveryArea || undefined,
+      deliverySlot: meta.deliverySlot || undefined,
       total: Number(session.amount_total || 0) / 100 || 0,
       paymentMethod: "STRIPE",
       paymentStatus: "PAID",
