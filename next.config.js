@@ -3,6 +3,14 @@ const { withSentryConfig } = require("@sentry/nextjs");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  images: {
+    // Allow next/image to optimize remote images from Cloudinary and DigitalOcean Spaces.
+    // Without this, next/image returns 400 for these hosts and images appear broken.
+    remotePatterns: [
+      { protocol: "https", hostname: "res.cloudinary.com" },
+      { protocol: "https", hostname: "**.digitaloceanspaces.com" }
+    ]
+  },
   headers: async () => [
     {
       source: "/(.*)",
