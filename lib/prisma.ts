@@ -1,11 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { pgSsl } from "./db";
 
 let prisma: PrismaClient | null = null;
 
 export function getPrisma() {
   if (!prisma) {
-    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+    const url = process.env.DATABASE_URL || "";
+    const adapter = new PrismaPg({ connectionString: url, ssl: pgSsl(url) });
     prisma = new PrismaClient({ adapter });
   }
   return prisma;

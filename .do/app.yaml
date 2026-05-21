@@ -48,6 +48,10 @@ services:
       - key: DATABASE_URL
         scope: RUN_AND_BUILD_TIME
         value: ${db.DATABASE_URL}
+      # CA cert so the Node pg client can verify the managed DB's TLS chain.
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
       # ---- Auth (REQUIRED — none of these are set on the live app yet) ----
       - key: AUTH_JWT_SECRET
         scope: RUN_TIME

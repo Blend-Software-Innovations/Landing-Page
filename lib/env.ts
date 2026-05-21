@@ -22,6 +22,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_GA4_ID: z.string().optional(),
   NEXT_PUBLIC_FB_PIXEL_ID: z.string().optional(),
   DATABASE_URL: z.string().optional(),
+  DATABASE_CA_CERT: z.string().optional(),
   DISABLE_DB: z.string().optional(),
   CONFIG_ID: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
