@@ -92,6 +92,13 @@ export default function AdminDashboard() {
   const [utmSummary, setUtmSummary] = useState<Array<{ source: string; campaign: string; orders: number; revenue: number }>>([]);
   const [abandoned, setAbandoned] = useState<any[]>([]);
   const [partnerInput, setPartnerInput] = useState("");
+  const [slotInput, setSlotInput] = useState("");
+  const [batchVariant, setBatchVariant] = useState("");
+  const [batchList, setBatchList] = useState<any[]>([]);
+  const [batchNo, setBatchNo] = useState("");
+  const [batchExpiry, setBatchExpiry] = useState("");
+  const [batchQty, setBatchQty] = useState("");
+  const [batchMsg, setBatchMsg] = useState("");
   const [adminUsers, setAdminUsers] = useState<Array<{ id: string; email: string; role: string }>>([]);
   const [bulkPriceDelta, setBulkPriceDelta] = useState("");
   const [bulkStockDelta, setBulkStockDelta] = useState("");
@@ -244,6 +251,47 @@ export default function AdminDashboard() {
     setConfig(next);
     setDirty(true);
     setStatus("Not saved yet");
+  };
+
+  const loadBatches = async (variant: string) => {
+    if (!variant) {
+      setBatchList([]);
+      return;
+    }
+    const res = await fetch(`/api/admin/batches?variantId=${encodeURIComponent(variant)}`);
+    const data = await res.json().catch(() => ({}));
+    setBatchList(Array.isArray(data.batches) ? data.batches : []);
+  };
+  const addBatch = async () => {
+    setBatchMsg("");
+    const res = await fetch("/api/admin/batches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({
+        variantId: batchVariant,
+        batchNo,
+        expiryDate: batchExpiry || null,
+        quantity: Number(batchQty || 0)
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setBatchMsg(data.error || "Failed to add batch");
+      return;
+    }
+    setBatchNo("");
+    setBatchExpiry("");
+    setBatchQty("");
+    setBatchMsg("Batch added.");
+    await loadBatches(batchVariant);
+  };
+  const deleteBatch = async (id: string) => {
+    const res = await fetch("/api/admin/batches", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({ id })
+    });
+    if (res.ok) await loadBatches(batchVariant);
   };
 
   const validateVariants = (items: SiteConfig["variants"]) => {
@@ -641,6 +689,109 @@ export default function AdminDashboard() {
             value={String(config.freeDeliveryThresholdQty)}
             onChange={(v) => updateConfig({ ...config, freeDeliveryThresholdQty: Number(v || 0) })}
           />
+          <InputField
+            label="Minimum order value (BDT, global fallback)"
+            value={String(config.minOrderValue ?? 0)}
+            onChange={(v) => updateConfig({ ...config, minOrderValue: Number(v || 0) })}
+          />
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="text-sm font-semibold text-slate-700">Delivery areas (per-area fee + min order)</div>
+            <div className="space-y-3">
+              {(config.deliveryAreas || []).map((area, index) => (
+                <div key={index} className="grid gap-3 md:grid-cols-4">
+                  <InputField
+                    label="Area name"
+                    value={area.name}
+                    onChange={(v) => {
+                      const next = [...(config.deliveryAreas || [])];
+                      next[index] = { ...area, name: v };
+                      updateConfig({ ...config, deliveryAreas: next });
+                    }}
+                  />
+                  <InputField
+                    label="Delivery fee"
+                    value={String(area.fee)}
+                    onChange={(v) => {
+                      const next = [...(config.deliveryAreas || [])];
+                      next[index] = { ...area, fee: Number(v || 0) };
+                      updateConfig({ ...config, deliveryAreas: next });
+                    }}
+                  />
+                  <InputField
+                    label="Min order (0 = none)"
+                    value={String(area.minOrder ?? 0)}
+                    onChange={(v) => {
+                      const next = [...(config.deliveryAreas || [])];
+                      next[index] = { ...area, minOrder: Number(v || 0) };
+                      updateConfig({ ...config, deliveryAreas: next });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600"
+                    onClick={() => {
+                      const next = (config.deliveryAreas || []).filter((_, idx) => idx !== index);
+                      updateConfig({ ...config, deliveryAreas: next });
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+              onClick={() =>
+                updateConfig({
+                  ...config,
+                  deliveryAreas: [...(config.deliveryAreas || []), { name: "New area", fee: 60, minOrder: 0 }]
+                })
+              }
+            >
+              Add area
+            </button>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="text-sm font-semibold text-slate-700">Delivery time slots</div>
+            <div className="flex flex-wrap gap-2">
+              {(config.deliverySlots || []).map((slot, index) => (
+                <span key={index} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                  {slot}
+                  <button
+                    type="button"
+                    className="text-rose-500"
+                    onClick={() =>
+                      updateConfig({ ...config, deliverySlots: (config.deliverySlots || []).filter((_, idx) => idx !== index) })
+                    }
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={slotInput}
+                onChange={(e) => setSlotInput(e.target.value)}
+                placeholder="Add slot (e.g., 9 AM – 12 PM)"
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                onClick={() => {
+                  const value = slotInput.trim();
+                  if (value) {
+                    updateConfig({ ...config, deliverySlots: [...(config.deliverySlots || []), value] });
+                    setSlotInput("");
+                  }
+                }}
+              >
+                Add slot
+              </button>
+            </div>
+          </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input
@@ -1004,6 +1155,80 @@ export default function AdminDashboard() {
         </Section>
         )}
 
+        {canWrite && (
+        <Section title="Batches / Expiry (FIFO)" hint="Add stock batches with expiry dates; sales consume the earliest-expiry batch first.">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="text-sm text-slate-600">
+              Variant
+              <select
+                value={batchVariant}
+                onChange={(e) => {
+                  setBatchVariant(e.target.value);
+                  setBatchMsg("");
+                  loadBatches(e.target.value);
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+              >
+                <option value="">Select a variant (SKU)</option>
+                {(config.variants || []).map((v) => (
+                  <option key={v.sku} value={v.sku}>
+                    {v.sku} {Object.values(v.optionValues || {}).join(" / ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {batchVariant && (
+            <>
+              <div className="grid gap-3 md:grid-cols-4">
+                <InputField label="Batch no." value={batchNo} onChange={setBatchNo} />
+                <label className="text-sm text-slate-600">
+                  Expiry date
+                  <input
+                    type="date"
+                    value={batchExpiry}
+                    onChange={(e) => setBatchExpiry(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                  />
+                </label>
+                <InputField label="Quantity" value={batchQty} onChange={setBatchQty} />
+                <button
+                  type="button"
+                  onClick={addBatch}
+                  className="self-end rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
+                >
+                  Add batch
+                </button>
+              </div>
+              {batchMsg && <div className="text-xs text-slate-600">{batchMsg}</div>}
+              <div className="space-y-2">
+                {batchList.length === 0 && <div className="text-xs text-slate-500">No batches yet.</div>}
+                {batchList.map((b) => (
+                  <div
+                    key={b.id}
+                    className={`flex items-center justify-between rounded-xl border px-3 py-2 text-sm ${
+                      b.expiringSoon ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <span>
+                      <strong>{b.batchNo}</strong> — qty {b.quantity}
+                      {b.expiryDate ? ` — exp ${new Date(b.expiryDate).toLocaleDateString()}` : ""}
+                      {b.expiringSoon ? " ⚠ expiring soon" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => deleteBatch(b.id)}
+                      className="text-xs font-semibold text-rose-500"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Section>
+        )}
         <Section title="Products" hint="Enable multi-product mode to sell multiple items.">
           <div className="flex flex-wrap gap-3 text-sm">
             {(["inventoryEnabled", "variantImagesEnabled", "multiProductEnabled", "categoriesEnabled", "otpEnabled"] as const).map((flag) => (
@@ -1460,6 +1685,13 @@ export default function AdminDashboard() {
                     <div className="text-sm font-semibold">{order.customerName}</div>
                     <div className="text-xs text-slate-500">{order.phone}</div>
                     <div className="text-xs text-slate-500">BDT {order.total}</div>
+                    {(order.deliveryArea || order.deliverySlot) && (
+                      <div className="text-xs text-slate-500">
+                        {order.deliveryArea ? `Area: ${order.deliveryArea}` : ""}
+                        {order.deliveryArea && order.deliverySlot ? " · " : ""}
+                        {order.deliverySlot ? `Slot: ${order.deliverySlot}` : ""}
+                      </div>
+                    )}
                     {order.paymentLink ? (
                       <a href={order.paymentLink} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">
                         Payment link

@@ -5,6 +5,7 @@ import { adminRateLimitPerMin } from "../../../lib/env";
 import { isRateLimited } from "../../../lib/rateLimit";
 import { requireDb } from "../../../lib/db";
 import { getPrisma } from "../../../lib/prisma";
+import { resolveInventoryVariantId } from "../../../lib/inventory";
 
 const EXPIRING_SOON_DAYS = 14;
 
@@ -20,7 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // ----- List batches (optionally for one variant), with expiring-soon flag -----
   if (req.method === "GET") {
     if (!hasPermission(role, "inventory:read")) return res.status(401).json({ error: "Unauthorized" });
-    const variantId = String(req.query.variantId || "");
+    const rawVariant = String(req.query.variantId || "");
+    const variantId = rawVariant ? (await resolveInventoryVariantId(rawVariant)) || rawVariant : "";
     const batches: any[] = await prisma.batch.findMany({
       where: variantId ? { variantId } : {},
       orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }, { receivedDate: "asc" }],
@@ -40,13 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!hasPermission(role, "inventory:write")) return res.status(401).json({ error: "Unauthorized" });
     if (!requireCsrf(req, res)) return;
     const body = (req.body || {}) as Record<string, unknown>;
-    const variantId = String(body.variantId || "");
+    const rawVariant = String(body.variantId || body.sku || "");
     const batchNo = String(body.batchNo || "").trim();
     const quantity = Math.floor(Number(body.quantity || 0));
     const expiryDate = body.expiryDate ? new Date(String(body.expiryDate)) : null;
-    if (!variantId || !batchNo || quantity <= 0) {
-      return res.status(400).json({ error: "variantId, batchNo and a positive quantity are required" });
+    if (!rawVariant || !batchNo || quantity <= 0) {
+      return res.status(400).json({ error: "variant (id or sku), batchNo and a positive quantity are required" });
     }
+    const variantId = (await resolveInventoryVariantId(rawVariant)) || rawVariant;
     const variant = await prisma.variant.findUnique({ where: { id: variantId } });
     if (!variant) return res.status(404).json({ error: "Variant not found" });
     try {
