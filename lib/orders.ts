@@ -1,7 +1,7 @@
 ﻿import fs from "fs";
 import path from "path";
 import { getPrisma } from "./prisma";
-import { commitInventory, extendHoldForOrder, releaseInventory } from "./inventory";
+import { extendHoldForOrder, releaseInventory } from "./inventory";
 import { notifyNewOrder, notifyOrderStatusChange, writeOrderAudit } from "./notifications";
 
 export type OrderPayload = {
@@ -147,20 +147,6 @@ export async function createOrder(payload: OrderPayload) {
   return order;
 }
 
-async function restockOrderItems(order: any) {
-  const prisma = getPrisma() as any;
-  const items = order.items || [];
-  await prisma.$transaction(async (tx: any) => {
-    for (const item of items) {
-      if (!item.variantId) continue;
-      await tx.variant.update({
-        where: { id: item.variantId },
-        data: { stockQty: { increment: item.quantity } }
-      });
-    }
-  });
-}
-
 function normalizeReservationIds(order: any) {
   const ids: string[] = [];
   if (order.reservationId) ids.push(order.reservationId);
@@ -176,7 +162,8 @@ export async function updateOrderStatus(
   const prisma = getPrisma() as any;
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) return null;
-  if (!isTransitionAllowed(order.status as OrderStatus, nextStatus)) return null;
+  const prevStatus = order.status as OrderStatus;
+  if (!isTransitionAllowed(prevStatus, nextStatus)) return null;
 
   const reservationIds = normalizeReservationIds(order);
   const now = new Date();
@@ -189,34 +176,59 @@ export async function updateOrderStatus(
     CANCELED: "canceledAt",
     RETURNED: "returnedAt"
   };
-  if (nextStatus === "CONFIRMED" && reservationIds.length) {
-    for (const id of reservationIds) {
-      await commitInventory(id);
-    }
-  }
-  if ((nextStatus === "CANCELED" || nextStatus === "RETURNED") && reservationIds.length) {
-    let releasedAny = false;
-    for (const id of reservationIds) {
-      const released = await releaseInventory(id);
-      if (released) releasedAny = true;
-    }
-    if (!releasedAny) {
-      await restockOrderItems(order);
-    }
-  }
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { status: nextStatus, [statusTimestamp[nextStatus]]: now }
+  // Inventory adjustment and the status change happen in one transaction so they can never
+  // diverge on a partial failure.
+  const updated = await prisma.$transaction(async (tx: any) => {
+    if (nextStatus === "CONFIRMED" && reservationIds.length) {
+      // Commit: drop the holds. Reserved stock was already decremented at reserve time and
+      // now counts as sold, so nothing else changes.
+      await tx.inventoryHold.deleteMany({ where: { id: { in: reservationIds } } });
+    }
+
+    if (nextStatus === "CANCELED" || nextStatus === "RETURNED") {
+      if (prevStatus === "PENDING") {
+        // Still reserved (not yet committed): return stock by releasing holds that still exist.
+        // A missing hold means it already expired and was restored — don't double-restock.
+        const holds = reservationIds.length
+          ? await tx.inventoryHold.findMany({ where: { id: { in: reservationIds } } })
+          : [];
+        for (const hold of holds) {
+          await tx.variant.update({
+            where: { id: hold.variantId },
+            data: { stockQty: { increment: hold.quantity } }
+          });
+        }
+        if (holds.length) {
+          await tx.inventoryHold.deleteMany({ where: { id: { in: holds.map((h: any) => h.id) } } });
+        }
+      } else {
+        // Order had passed CONFIRMED, so stock was already committed/sold (holds gone). Put the
+        // ordered quantities back.
+        for (const item of order.items || []) {
+          if (!item.variantId) continue;
+          await tx.variant.update({
+            where: { id: item.variantId },
+            data: { stockQty: { increment: item.quantity } }
+          });
+        }
+      }
+    }
+
+    return tx.order.update({
+      where: { id: orderId },
+      data: { status: nextStatus, [statusTimestamp[nextStatus]]: now }
+    });
   });
+
   await writeOrderAudit({
     orderId: order.id,
     actor: meta?.actor,
     role: meta?.role,
     action: "order.status",
-    data: { from: order.status, to: nextStatus }
+    data: { from: prevStatus, to: nextStatus }
   });
-  await notifyOrderStatusChange(updated, order.status, nextStatus);
+  await notifyOrderStatusChange(updated, prevStatus, nextStatus);
   return updated;
 }
 

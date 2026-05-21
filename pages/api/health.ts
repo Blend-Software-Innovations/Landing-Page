@@ -1,7 +1,25 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { logger } from "../../lib/logger";
+import { getPool, isDbAvailable } from "../../lib/db";
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  logger.info({ method: req.method, url: req.url }, "health check");
-  return res.status(200).json({ status: "ok", time: new Date().toISOString() });
+export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+  const checks: Record<string, string> = {};
+  let healthy = true;
+
+  if (isDbAvailable()) {
+    try {
+      await getPool()!.query("SELECT 1");
+      checks.db = "ok";
+    } catch (error) {
+      logger.error({ err: error }, "health check: database unreachable");
+      checks.db = "error";
+      healthy = false;
+    }
+  } else {
+    checks.db = "disabled";
+  }
+
+  return res
+    .status(healthy ? 200 : 503)
+    .json({ status: healthy ? "ok" : "degraded", checks, time: new Date().toISOString() });
 }

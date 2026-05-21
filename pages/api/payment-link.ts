@@ -29,11 +29,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const payload = req.body || {};
+
+  // --- Idempotency: a retried request must not create a second order + reservations ---
+  const idempotencyKey = String(payload.idempotencyKey || "").trim() || null;
+  if (idempotencyKey) {
+    const prisma = getPrisma() as any;
+    const existing = await prisma.order.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      return res.status(200).json({ url: existing.paymentLink || null, orderId: existing.id, idempotent: true });
+    }
+  }
+
   const config = await getConfig();
   if (config.features?.otpEnabled) {
     const normalizedPhone = normalizePhone(String(payload.phone || ""));
     const otpToken = String(payload.otpToken || "");
-    if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
+    if (!otpToken || !(await validateOtpToken(otpToken, normalizedPhone))) {
       return res.status(401).json({ error: "OTP verification required" });
     }
   }
@@ -101,6 +112,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     total: Number(payload.total || 0),
     paymentMethod: provider.toUpperCase(),
     paymentStatus: "UNPAID",
+    idempotencyKey: idempotencyKey || undefined,
     productId: payload.productId || "",
     variantId: payload.variantId || "",
     quantity: Number(payload.quantity || 1),

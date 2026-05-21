@@ -2,8 +2,6 @@ import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import formidable from "formidable";
 import os from "os";
-import fs from "fs";
-import path from "path";
 import { uploadImage } from "../../lib/uploads";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { createOrder, updateOrderStatus } from "../../lib/orders";
@@ -18,7 +16,6 @@ export const config = {
   api: { bodyParser: false }
 };
 
-const dataPath = path.join(process.cwd(), "data", "manual-payments.jsonl");
 
 function normalizePhone(input: string) {
   const digits = input.replace(/\D/g, "");
@@ -58,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (config.features?.otpEnabled) {
         const normalizedPhone = normalizePhone(String(payload.phone || ""));
         const otpToken = String(payload.otpToken || "");
-        if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
+        if (!otpToken || !(await validateOtpToken(otpToken, normalizedPhone))) {
           return res.status(401).json({ error: "OTP verification required" });
         }
       }
@@ -110,7 +107,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         resolvedItems.push({ ...item, variantId: resolvedId });
       }
       const upload = await uploadImage(file.filepath, file.originalFilename || "payment-proof.jpg", "public");
-      const record = { ...payload, reservationIds, proofUrl: upload.url, createdAt: new Date().toISOString() };
       const fraud = await detectFraud({
         phone: payload.phone || "",
         deviceFingerprint: payload.deviceFingerprint || "",
@@ -169,8 +165,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         action: "payment.manual.submitted",
         data: { transactionId: txnId, proofUrl: upload.url, manualStatus }
       });
-      fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-      fs.appendFileSync(dataPath, `${JSON.stringify(record)}\n`);
       return res.status(200).json({ status: "ok", url: upload.url });
     } catch (uploadError) {
       logger.error({ err: uploadError }, "Payment proof upload failed");

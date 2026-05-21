@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   if (!requireDb(res)) return;
 
-  const rows = getOtpMetrics();
+  const rows = await getOtpMetrics();
   const header = ["Phone", "Attempts", "Pending", "LastRequested", "CooldownUntil", "LockedUntil"];
   const lines = [header.join(",")];
   rows.forEach((row) => {

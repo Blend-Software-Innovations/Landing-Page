@@ -1,0 +1,107 @@
+# DigitalOcean App Platform spec — reference for the deployed "blend-landing" app.
+#
+# This mirrors the LIVE setup: Node buildpack (not the Dockerfile), source = the GitHub repo,
+# autodeploy on push. Migrations run via `npm start` (which is `prisma migrate deploy && next
+# start`) — fine for a single instance. When scaling to 2+ instances, move migrations to a
+# dedicated PRE_DEPLOY job instead (a single instance must own migrations to avoid races).
+#
+# The dashboard is the source of truth for the running app; this file documents the intended
+# config and the full env-var checklist. Apply with: doctl apps update <APP_ID> --spec .do/app.yaml
+# Replace every CHANGE_ME (set secrets as encrypted in the dashboard).
+
+name: blend-landing
+region: blr1
+
+# Managed Postgres — use a FRESH database for the Prisma schema (do not point at the old
+# prototype DB; its raw tables would collide with Prisma migrations).
+databases:
+  - name: db
+    engine: PG
+    version: "15"
+    production: false
+
+services:
+  - name: landing-page
+    github:
+      repo: Blend-Software-Innovations/Landing-Page
+      branch: main
+      deploy_on_push: true
+    environment_slug: node-js
+    build_command: npm run build
+    run_command: npm start
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xs
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 30
+      period_seconds: 30
+      failure_threshold: 3
+    envs:
+      - key: NODE_ENV
+        scope: RUN_AND_BUILD_TIME
+        value: production
+      # Buildpack must install devDependencies so the build (tsc/next) works.
+      - key: NPM_CONFIG_PRODUCTION
+        scope: BUILD_TIME
+        value: "false"
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ${db.DATABASE_URL}
+      # ---- Auth (REQUIRED — none of these are set on the live app yet) ----
+      - key: AUTH_JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      - key: AUTH_REFRESH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      - key: AUTH_ADMIN_EMAIL
+        scope: RUN_TIME
+        value: CHANGE_ME@example.com
+      - key: AUTH_ADMIN_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      # ---- Uploads: Cloudinary is already configured and works; keep these ----
+      - key: CLOUDINARY_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      # (Cloudinary alternative shown; the existing AWS_*/S3_BUCKET_NAME vars are NOT read by the
+      #  code — it expects S3_BUCKET/S3_REGION/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY — so they
+      #  can be deleted unless you switch uploads to Spaces with the correct names.)
+      # ---- SMS / OTP: code reads TWILIO_SID / TWILIO_AUTH / TWILIO_PHONE ----
+      #      (the live app currently has TWILIO_ACCOUNT_SID/_AUTH_TOKEN/_PHONE_NUMBER — wrong names) ----
+      - key: TWILIO_SID
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      - key: TWILIO_AUTH
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      - key: TWILIO_PHONE
+        scope: RUN_TIME
+        value: CHANGE_ME
+      # ---- Payments ----
+      - key: STRIPE_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      - key: STRIPE_WEBHOOK_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      # ---- Public ----
+      - key: NEXT_PUBLIC_SITE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: https://CHANGE_ME.ondigitalocean.app
+      # ---- Optional: SENTRY_DSN, NEXT_PUBLIC_SENTRY_DSN, META_PIXEL_ID, META_CAPI_TOKEN,
+      #      NEXT_PUBLIC_GTM_ID, NEXT_PUBLIC_GA4_ID, NEXT_PUBLIC_FB_PIXEL_ID
+      # ---- Redis: only when scaling to 2+ instances ----
+      # - key: REDIS_URL
+      #   scope: RUN_TIME
+      #   type: SECRET
+      #   value: CHANGE_ME

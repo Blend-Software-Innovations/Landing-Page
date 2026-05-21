@@ -1,8 +1,6 @@
 import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
-import fs from "fs";
-import path from "path";
 import twilio from "twilio";
 import { commitInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { createOrder } from "../../lib/orders";
@@ -22,7 +20,6 @@ const twilioAuth = process.env.TWILIO_AUTH || "";
 const twilioPhone = process.env.TWILIO_PHONE || "";
 const twilioClient = twilioSid && twilioAuth ? twilio(twilioSid, twilioAuth) : null;
 
-const dataPath = path.join(process.cwd(), "data", "stripe-webhook.jsonl");
 
 async function readBody(req: NextApiRequest) {
   const chunks: Buffer[] = [];
@@ -61,9 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.error({ err: error }, "Webhook signature verification failed");
     return res.status(400).json({ error: "Invalid signature" });
   }
-
-  fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-  fs.appendFileSync(dataPath, `${JSON.stringify({ type: event.type, createdAt: new Date().toISOString() })}\n`);
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;

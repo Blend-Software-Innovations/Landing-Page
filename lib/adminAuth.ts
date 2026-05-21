@@ -85,7 +85,7 @@ export async function resolveActor(req: NextApiRequest) {
     const { payload } = await jwtVerify(token, requireAccessSecret());
     const role = (payload.role as AdminRole) || "none";
     const sub = payload.sub as string | undefined;
-    const user = sub ? findUserById(sub) : null;
+    const user = sub ? await findUserById(sub) : null;
     return { actor: user?.email || sub || "unknown", role };
   } catch {
     return { actor: "unknown", role: "none" as AdminRole };

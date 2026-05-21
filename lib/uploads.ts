@@ -61,9 +61,14 @@ async function uploadToCloudinary(filepath: string, filename: string): Promise<U
 async function uploadToS3(filepath: string, filename: string): Promise<UploadResult> {
   const bucket = process.env.S3_BUCKET as string;
   const region = process.env.S3_REGION as string;
+  // S3_ENDPOINT lets this work with S3-compatible providers like DigitalOcean Spaces
+  // (e.g. https://blr1.digitaloceanspaces.com). Left unset, it defaults to AWS S3.
+  const endpoint = process.env.S3_ENDPOINT || undefined;
   const key = `uploads/${Date.now()}-${sanitizeName(filename)}`;
   const client = new S3Client({
     region,
+    endpoint,
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "1",
     credentials: {
       accessKeyId: process.env.S3_ACCESS_KEY_ID as string,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY as string

@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const phone = String(body.phone || "");
   if (!phone) return res.status(400).json({ error: "Missing phone" });
 
-  clearOtpLock(phone);
-  clearOtpCooldown(phone);
+  await clearOtpLock(phone);
+  await clearOtpCooldown(phone);
   return res.status(200).json({ status: "ok" });
 }

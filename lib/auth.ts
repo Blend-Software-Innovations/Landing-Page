@@ -1,38 +1,35 @@
-﻿import fs from "fs";
-import path from "path";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { nanoid } from "nanoid";
 import { env } from "./env";
+import { getPrisma } from "./prisma";
 
-const dataDir = process.env.AUTH_DATA_DIR || path.join(process.cwd(), "data");
-const usersPath = path.join(dataDir, "users.json");
-const refreshPath = path.join(dataDir, "refresh.jsonl");
-const resetPath = path.join(dataDir, "password-resets.jsonl");
+export type AppRole = "owner" | "admin" | "staff";
 
 export type UserRecord = {
   id: string;
   email: string;
   passwordHash: string;
-  role: "owner" | "admin" | "staff";
-};
-
-type RefreshRecord = {
-  jti: string;
-  userId: string;
-  expiresAt: string;
-  revoked: boolean;
-};
-
-type ResetRecord = {
-  tokenHash: string;
-  userId: string;
-  expiresAt: string;
-  used: boolean;
+  role: AppRole;
 };
 
 const encoder = new TextEncoder();
+
+// The Prisma AdminUser.role enum is uppercase (OWNER/ADMIN/STAFF) while the rest of the app
+// (JWT payload, lib/adminAuth.ts permission table) uses lowercase. Map at this boundary so
+// nothing downstream changes.
+function toAppRole(dbRole: string): AppRole {
+  return dbRole.toLowerCase() as AppRole;
+}
+
+function toDbRole(role: AppRole): string {
+  return role.toUpperCase();
+}
+
+function toUserRecord(row: { id: string; email: string; passwordHash: string; role: string }): UserRecord {
+  return { id: row.id, email: row.email, passwordHash: row.passwordHash, role: toAppRole(row.role) };
+}
 
 function requireAccessSecret() {
   if (!env.AUTH_JWT_SECRET) {
@@ -48,63 +45,52 @@ function requireRefreshSecret() {
   return encoder.encode(env.AUTH_REFRESH_SECRET);
 }
 
-function readUsers(): UserRecord[] {
-  if (!fs.existsSync(usersPath)) return [];
-  try {
-    return JSON.parse(fs.readFileSync(usersPath, "utf8")) as UserRecord[];
-  } catch {
-    return [];
-  }
-}
-
-function writeUsers(users: UserRecord[]) {
-  fs.mkdirSync(path.dirname(usersPath), { recursive: true });
-  fs.writeFileSync(usersPath, JSON.stringify(users, null, 2), "utf8");
-}
-
 export async function ensureAdminSeed() {
   if (!env.AUTH_ADMIN_EMAIL || !env.AUTH_ADMIN_PASSWORD) return;
-  const users = readUsers();
-  const existing = users.find((u) => u.email === env.AUTH_ADMIN_EMAIL);
+  const prisma = getPrisma() as any;
+  const existing = await prisma.adminUser.findUnique({ where: { email: env.AUTH_ADMIN_EMAIL } });
   if (existing) return;
   const passwordHash = await bcrypt.hash(env.AUTH_ADMIN_PASSWORD, 10);
-  const newUser: UserRecord = {
-    id: nanoid(),
-    email: env.AUTH_ADMIN_EMAIL,
-    passwordHash,
-    role: "owner"
-  };
-  users.push(newUser);
-  writeUsers(users);
+  await prisma.adminUser.create({
+    data: { email: env.AUTH_ADMIN_EMAIL, passwordHash, role: "OWNER" }
+  });
 }
 
 export async function verifyCredentials(email: string, password: string) {
-  const users = readUsers();
-  const user = users.find((u) => u.email === email);
+  const prisma = getPrisma() as any;
+  const user = await prisma.adminUser.findUnique({ where: { email } });
   if (!user) return null;
   const ok = await bcrypt.compare(password, user.passwordHash);
-  return ok ? user : null;
+  return ok ? toUserRecord(user) : null;
 }
 
-export function findUserById(id: string) {
-  const users = readUsers();
-  return users.find((u) => u.id === id) || null;
+export async function findUserById(id: string) {
+  const prisma = getPrisma() as any;
+  const user = await prisma.adminUser.findUnique({ where: { id } });
+  return user ? toUserRecord(user) : null;
 }
 
 export async function listUsers() {
-  return readUsers().map((u) => ({ id: u.id, email: u.email, role: u.role }));
+  const prisma = getPrisma() as any;
+  const users = await prisma.adminUser.findMany({ orderBy: { createdAt: "asc" } });
+  return users.map((u: any) => ({ id: u.id, email: u.email, role: toAppRole(u.role) }));
 }
 
-export async function updateUserRole(id: string, role: "owner" | "admin" | "staff") {
-  const users = readUsers();
-  const user = users.find((u) => u.id === id);
-  if (!user) return null;
-  user.role = role;
-  writeUsers(users);
-  return { id: user.id, email: user.email, role: user.role };
+export async function updateUserRole(id: string, role: AppRole) {
+  const prisma = getPrisma() as any;
+  try {
+    const user = await prisma.adminUser.update({
+      where: { id },
+      data: { role: toDbRole(role) as any }
+    });
+    return { id: user.id, email: user.email, role: toAppRole(user.role) };
+  } catch {
+    return null;
+  }
 }
 
 export async function issueTokens(user: UserRecord) {
+  const prisma = getPrisma() as any;
   const accessSecret = requireAccessSecret();
   const refreshSecret = requireRefreshSecret();
   const accessToken = await new SignJWT({ sub: user.id, role: user.role })
@@ -120,88 +106,65 @@ export async function issueTokens(user: UserRecord) {
     .setExpirationTime("7d")
     .sign(refreshSecret);
 
-  const record: RefreshRecord = {
-    jti,
-    userId: user.id,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    revoked: false
-  };
-  fs.mkdirSync(path.dirname(refreshPath), { recursive: true });
-  fs.appendFileSync(refreshPath, `${JSON.stringify(record)}\n`);
+  await prisma.refreshToken.create({
+    data: {
+      id: jti,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      revoked: false
+    }
+  });
 
   return { accessToken, refreshToken };
 }
 
-function readRefresh(): RefreshRecord[] {
-  if (!fs.existsSync(refreshPath)) return [];
-  const raw = fs.readFileSync(refreshPath, "utf8");
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as RefreshRecord);
-}
-
-function writeRefresh(records: RefreshRecord[]) {
-  fs.mkdirSync(path.dirname(refreshPath), { recursive: true });
-  fs.writeFileSync(refreshPath, records.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
-}
-
 export async function rotateRefreshToken(token: string) {
+  const prisma = getPrisma() as any;
   const refreshSecret = requireRefreshSecret();
   const { payload } = await jwtVerify(token, refreshSecret);
   const jti = payload.jti as string | undefined;
   const userId = payload.sub as string | undefined;
   if (!jti || !userId) return null;
 
-  const records = readRefresh();
-  const record = records.find((r) => r.jti === jti && r.userId === userId && !r.revoked);
-  if (!record) return null;
-  if (new Date(record.expiresAt).getTime() < Date.now()) return null;
+  const record = await prisma.refreshToken.findUnique({ where: { id: jti } });
+  if (!record || record.userId !== userId || record.revoked) return null;
+  if (record.expiresAt.getTime() < Date.now()) return null;
 
-  record.revoked = true;
-  writeRefresh(records);
+  await prisma.refreshToken.update({ where: { id: jti }, data: { revoked: true } });
 
-  const users = readUsers();
-  const user = users.find((u) => u.id === userId);
+  const user = await findUserById(userId);
   if (!user) return null;
   return issueTokens(user);
 }
 
-export function revokeRefreshToken(token: string) {
+export async function revokeRefreshToken(token: string) {
+  const prisma = getPrisma() as any;
   try {
     const refreshSecret = requireRefreshSecret();
-    const decoded = jwtVerify(token, refreshSecret);
-    return decoded.then(({ payload }) => {
-      const jti = payload.jti as string | undefined;
-      if (!jti) return;
-      const records = readRefresh();
-      const record = records.find((r) => r.jti === jti);
-      if (record) {
-        record.revoked = true;
-        writeRefresh(records);
-      }
-    });
+    const { payload } = await jwtVerify(token, refreshSecret);
+    const jti = payload.jti as string | undefined;
+    if (!jti) return;
+    await prisma.refreshToken.updateMany({ where: { id: jti }, data: { revoked: true } });
   } catch {
-    return Promise.resolve();
+    // Invalid token — nothing to revoke.
   }
 }
 
 export async function createResetToken(email: string) {
-  const users = readUsers();
-  const user = users.find((u) => u.email === email);
+  const prisma = getPrisma() as any;
+  const user = await prisma.adminUser.findUnique({ where: { email } });
   if (!user) return null;
 
   const token = nanoid(32);
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const record: ResetRecord = {
-    tokenHash,
-    userId: user.id,
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    used: false
-  };
-  fs.mkdirSync(path.dirname(resetPath), { recursive: true });
-  fs.appendFileSync(resetPath, `${JSON.stringify(record)}\n`);
+  await prisma.passwordReset.create({
+    data: {
+      tokenHash,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      used: false
+    }
+  });
   return token;
 }
 
@@ -212,26 +175,16 @@ export async function validateAccessToken(token: string) {
 }
 
 export async function resetPassword(token: string, newPassword: string) {
-  if (!fs.existsSync(resetPath)) return false;
-  const raw = fs.readFileSync(resetPath, "utf8");
-  const items = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as ResetRecord);
-
+  const prisma = getPrisma() as any;
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const record = items.find((r) => r.tokenHash === tokenHash && !r.used);
-  if (!record) return false;
-  if (new Date(record.expiresAt).getTime() < Date.now()) return false;
+  const record = await prisma.passwordReset.findUnique({ where: { tokenHash } });
+  if (!record || record.used) return false;
+  if (record.expiresAt.getTime() < Date.now()) return false;
 
-  const users = readUsers();
-  const user = users.find((u) => u.id === record.userId);
-  if (!user) return false;
-
-  user.passwordHash = await bcrypt.hash(newPassword, 10);
-  record.used = true;
-  writeUsers(users);
-  fs.writeFileSync(resetPath, items.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.$transaction([
+    prisma.adminUser.update({ where: { id: record.userId }, data: { passwordHash } }),
+    prisma.passwordReset.update({ where: { tokenHash }, data: { used: true } })
+  ]);
   return true;
 }

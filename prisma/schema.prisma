@@ -57,6 +57,56 @@ model AdminUser {
   createdAt    DateTime @default(now())
 }
 
+model RefreshToken {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordReset {
+  tokenHash String   @id
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model OtpCode {
+  id        String   @id
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+  @@index([expiresAt])
+}
+
+model OtpSession {
+  token     String   @id
+  phone     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model OtpThrottle {
+  phone         String    @id
+  cooldownUntil DateTime?
+  lockedUntil   DateTime?
+  updatedAt     DateTime  @updatedAt
+}
+
 model Product {
   id          String      @id @default(cuid())
   name        String

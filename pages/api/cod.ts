@@ -1,6 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import fs from "fs";
-import path from "path";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { isRateLimited } from "../../lib/rateLimit";
@@ -10,7 +8,6 @@ import { validateOtpToken } from "../../lib/otp";
 import { detectFraud } from "../../lib/fraud";
 import { getPrisma } from "../../lib/prisma";
 
-const dataPath = path.join(process.cwd(), "data", "cod.jsonl");
 
 function normalizePhone(input: string) {
   const digits = input.replace(/\D/g, "");
@@ -46,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const config = await getConfig();
   if (config.features?.otpEnabled) {
     const normalizedPhone = normalizePhone(String(payload.phone || ""));
-    if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
+    if (!otpToken || !(await validateOtpToken(otpToken, normalizedPhone))) {
       return res.status(401).json({ error: "OTP verification required" });
     }
   }
@@ -101,11 +98,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     reservationIds.push(reservationId);
     resolvedItems.push({ ...item, variantId: resolvedId });
   }
-  const record = {
-    ...payload,
-    reservationIds,
-    createdAt: new Date().toISOString()
-  };
   const order = await createOrder({
     customerName: payload.name || "",
     phone: payload.phone || "",
@@ -130,7 +122,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     items: resolvedItems,
     status: "PENDING"
   });
-  fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-  fs.appendFileSync(dataPath, `${JSON.stringify(record)}\n`);
   return res.status(200).json({ status: "ok", orderId: order.id });
 }

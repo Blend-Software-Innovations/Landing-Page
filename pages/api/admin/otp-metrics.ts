@@ -18,6 +18,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   if (!requireDb(res)) return;
 
-  const rows = getOtpMetrics();
+  const rows = await getOtpMetrics();
   return res.status(200).json({ rows });
 }

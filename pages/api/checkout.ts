@@ -56,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const config = await getConfig();
     if (config.features?.otpEnabled) {
       const normalizedPhone = normalizePhone(phone);
-      if (!otpToken || !validateOtpToken(otpToken, normalizedPhone)) {
+      if (!otpToken || !(await validateOtpToken(otpToken, normalizedPhone))) {
         return res.status(401).json({ error: "OTP verification required" });
       }
     }

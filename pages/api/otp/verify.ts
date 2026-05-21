@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const config = await getConfig();
   const lockoutAttempts = config.otpSettings?.lockoutAttempts ?? otpLockoutMaxAttempts;
   const lockoutMin = config.otpSettings?.lockoutMin ?? otpLockoutMin;
-  const token = verifyOtp(
+  const token = await verifyOtp(
     String(otpId),
     normalized,
     String(code),
@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     lockoutAttempts,
     lockoutMin
   );
-  if (!token || !validateOtpToken(token, normalized)) {
+  if (!token || !(await validateOtpToken(token, normalized))) {
     return res.status(400).json({ error: "Invalid OTP" });
   }
 

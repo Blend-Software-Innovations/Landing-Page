@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const config = await getConfig();
   const cooldownSec = config.otpSettings?.cooldownSec ?? otpResendCooldownSec;
-  const { otpId, code, blockedUntil } = requestOtp(normalized, otpTtlMin, otpLength) as {
+  const { otpId, code, blockedUntil } = (await requestOtp(normalized, otpTtlMin, otpLength)) as {
     otpId: string;
     code: string;
     blockedUntil?: string;
@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!otpId) {
     return res.status(429).json({ error: "OTP already sent. Please wait.", blockedUntil });
   }
-  setOtpCooldown(normalized, cooldownSec);
+  await setOtpCooldown(normalized, cooldownSec);
 
   const twilioSid = process.env.TWILIO_SID || "";
   const twilioAuth = process.env.TWILIO_AUTH || "";

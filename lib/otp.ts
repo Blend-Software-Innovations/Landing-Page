@@ -1,49 +1,6 @@
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
 import { nanoid } from "nanoid";
-
-type OtpEntry = {
-  id: string;
-  phone: string;
-  codeHash: string;
-  expiresAt: string;
-  used: boolean;
-  attempts: number;
-  createdAt: string;
-};
-
-type OtpSession = {
-  token: string;
-  phone: string;
-  expiresAt: string;
-};
-
-type OtpLock = {
-  phone: string;
-  lockedUntil: string;
-};
-
-const dataDir = path.join(process.cwd(), "data");
-const otpPath = path.join(dataDir, "otp.json");
-const sessionPath = path.join(dataDir, "otp-sessions.json");
-const cooldownPath = path.join(dataDir, "otp-cooldown.json");
-const lockoutPath = path.join(dataDir, "otp-lockout.json");
-
-function readJson<T>(file: string, fallback: T): T {
-  if (!fs.existsSync(file)) return fallback;
-  try {
-    const raw = fs.readFileSync(file, "utf8");
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson<T>(file: string, data: T) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
-}
+import { getPrisma } from "./prisma";
 
 function hash(input: string) {
   return crypto.createHash("sha256").update(input).digest("hex");
@@ -53,41 +10,52 @@ function randomCode(length: number) {
   const digits = "0123456789";
   let out = "";
   for (let i = 0; i < length; i += 1) {
-    out += digits[Math.floor(Math.random() * digits.length)];
+    out += digits[crypto.randomInt(0, digits.length)];
   }
   return out;
 }
 
-export function requestOtp(phone: string, ttlMinutes = 5, length = 6) {
-  const cooldowns = readJson<Record<string, string>>(cooldownPath, {});
-  const locked = readJson<OtpLock[]>(lockoutPath, []);
-  const lock = locked.find((item) => item.phone === phone);
-  if (lock && new Date(lock.lockedUntil).getTime() > Date.now()) {
-    return { otpId: "", code: "", blockedUntil: lock.lockedUntil };
+async function pruneExpired(prisma: any) {
+  const now = new Date();
+  await prisma.otpCode.deleteMany({ where: { expiresAt: { lt: now } } });
+  await prisma.otpSession.deleteMany({ where: { expiresAt: { lt: now } } });
+}
+
+export async function requestOtp(phone: string, ttlMinutes = 5, length = 6) {
+  const prisma = getPrisma() as any;
+  await pruneExpired(prisma);
+
+  const throttle = await prisma.otpThrottle.findUnique({ where: { phone } });
+  const now = Date.now();
+  if (throttle?.lockedUntil && throttle.lockedUntil.getTime() > now) {
+    return { otpId: "", code: "", blockedUntil: throttle.lockedUntil.toISOString() };
   }
-  const until = cooldowns[phone];
-  if (until && new Date(until).getTime() > Date.now()) {
-    return { otpId: "", code: "", blockedUntil: until };
+  if (throttle?.cooldownUntil && throttle.cooldownUntil.getTime() > now) {
+    return { otpId: "", code: "", blockedUntil: throttle.cooldownUntil.toISOString() };
   }
+
   const code = randomCode(length);
-  const entry: OtpEntry = {
-    id: nanoid(),
-    phone,
-    codeHash: hash(code),
-    expiresAt: new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString(),
-    used: false,
-    attempts: 0,
-    createdAt: new Date().toISOString()
-  };
-  const current = readJson<OtpEntry[]>(otpPath, []);
-  writeJson(otpPath, [entry, ...current].slice(0, 200));
+  const entry = await prisma.otpCode.create({
+    data: {
+      id: nanoid(),
+      phone,
+      codeHash: hash(code),
+      expiresAt: new Date(now + ttlMinutes * 60 * 1000),
+      used: false,
+      attempts: 0
+    }
+  });
   return { otpId: entry.id, code };
 }
 
-export function getOtpMetrics() {
-  const entries = readJson<OtpEntry[]>(otpPath, []);
-  const cooldowns = readJson<Record<string, string>>(cooldownPath, {});
-  const locks = readJson<OtpLock[]>(lockoutPath, []);
+export async function getOtpMetrics() {
+  const prisma = getPrisma() as any;
+  const entries: any[] = await prisma.otpCode.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 500
+  });
+  const throttles: any[] = await prisma.otpThrottle.findMany();
+
   const byPhone: Record<
     string,
     {
@@ -99,29 +67,23 @@ export function getOtpMetrics() {
     }
   > = {};
 
+  const now = Date.now();
   entries.forEach((entry) => {
     const key = entry.phone;
-    if (!byPhone[key]) {
-      byPhone[key] = { attempts: 0, pending: 0 };
-    }
+    if (!byPhone[key]) byPhone[key] = { attempts: 0, pending: 0 };
     const current = byPhone[key];
     current.attempts += entry.attempts || 0;
-    if (!entry.used && new Date(entry.expiresAt).getTime() > Date.now()) {
-      current.pending += 1;
-    }
-    if (!current.lastRequested || new Date(entry.createdAt).getTime() > new Date(current.lastRequested).getTime()) {
-      current.lastRequested = entry.createdAt;
+    if (!entry.used && entry.expiresAt.getTime() > now) current.pending += 1;
+    const created = entry.createdAt.toISOString();
+    if (!current.lastRequested || created > current.lastRequested) {
+      current.lastRequested = created;
     }
   });
 
-  Object.entries(cooldowns).forEach(([phone, until]) => {
-    if (!byPhone[phone]) byPhone[phone] = { attempts: 0, pending: 0 };
-    byPhone[phone].cooldownUntil = until;
-  });
-
-  locks.forEach((lock) => {
-    if (!byPhone[lock.phone]) byPhone[lock.phone] = { attempts: 0, pending: 0 };
-    byPhone[lock.phone].lockedUntil = lock.lockedUntil;
+  throttles.forEach((t) => {
+    if (!byPhone[t.phone]) byPhone[t.phone] = { attempts: 0, pending: 0 };
+    if (t.cooldownUntil) byPhone[t.phone].cooldownUntil = t.cooldownUntil.toISOString();
+    if (t.lockedUntil) byPhone[t.phone].lockedUntil = t.lockedUntil.toISOString();
   });
 
   return Object.entries(byPhone)
@@ -130,38 +92,40 @@ export function getOtpMetrics() {
     .slice(0, 100);
 }
 
-export function clearOtpLock(phone: string) {
-  const locks = readJson<OtpLock[]>(lockoutPath, []);
-  const next = locks.filter((item) => item.phone !== phone);
-  writeJson(lockoutPath, next);
+export async function clearOtpLock(phone: string) {
+  const prisma = getPrisma() as any;
+  await prisma.otpThrottle.updateMany({ where: { phone }, data: { lockedUntil: null } });
   return true;
 }
 
-export function clearOtpCooldown(phone: string) {
-  const cooldowns = readJson<Record<string, string>>(cooldownPath, {});
-  if (cooldowns[phone]) {
-    delete cooldowns[phone];
-    writeJson(cooldownPath, cooldowns);
-  }
+export async function clearOtpCooldown(phone: string) {
+  const prisma = getPrisma() as any;
+  await prisma.otpThrottle.updateMany({ where: { phone }, data: { cooldownUntil: null } });
   return true;
 }
 
-export function setOtpCooldown(phone: string, cooldownSeconds: number) {
-  const data = readJson<Record<string, string>>(cooldownPath, {});
-  data[phone] = new Date(Date.now() + cooldownSeconds * 1000).toISOString();
-  writeJson(cooldownPath, data);
+export async function setOtpCooldown(phone: string, cooldownSeconds: number) {
+  const prisma = getPrisma() as any;
+  const cooldownUntil = new Date(Date.now() + cooldownSeconds * 1000);
+  await prisma.otpThrottle.upsert({
+    where: { phone },
+    create: { phone, cooldownUntil },
+    update: { cooldownUntil }
+  });
 }
 
-export function lockOtp(phone: string, minutes: number) {
-  const items = readJson<OtpLock[]>(lockoutPath, []);
-  const until = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-  const next = items.filter((item) => item.phone !== phone);
-  next.push({ phone, lockedUntil: until });
-  writeJson(lockoutPath, next);
-  return { lockedUntil: until };
+export async function lockOtp(phone: string, minutes: number) {
+  const prisma = getPrisma() as any;
+  const lockedUntil = new Date(Date.now() + minutes * 60 * 1000);
+  await prisma.otpThrottle.upsert({
+    where: { phone },
+    create: { phone, lockedUntil },
+    update: { lockedUntil }
+  });
+  return { lockedUntil: lockedUntil.toISOString() };
 }
 
-export function verifyOtp(
+export async function verifyOtp(
   otpId: string,
   phone: string,
   code: string,
@@ -169,37 +133,41 @@ export function verifyOtp(
   maxAttempts = 5,
   lockoutMinutes = 10
 ) {
-  const locked = readJson<OtpLock[]>(lockoutPath, []);
-  const lock = locked.find((item) => item.phone === phone);
-  if (lock && new Date(lock.lockedUntil).getTime() > Date.now()) return null;
-  const items = readJson<OtpEntry[]>(otpPath, []);
-  const entry = items.find((item) => item.id === otpId && item.phone === phone && !item.used);
+  const prisma = getPrisma() as any;
+  const now = Date.now();
+
+  const throttle = await prisma.otpThrottle.findUnique({ where: { phone } });
+  if (throttle?.lockedUntil && throttle.lockedUntil.getTime() > now) return null;
+
+  const entry = await prisma.otpCode.findFirst({ where: { id: otpId, phone, used: false } });
   if (!entry) return null;
-  if (new Date(entry.expiresAt).getTime() < Date.now()) return null;
+  if (entry.expiresAt.getTime() < now) return null;
+
   if (entry.codeHash !== hash(code)) {
-    entry.attempts += 1;
-    writeJson(otpPath, items);
-    if (entry.attempts >= maxAttempts) {
-      lockOtp(phone, lockoutMinutes);
+    const attempts = (entry.attempts || 0) + 1;
+    await prisma.otpCode.update({ where: { id: entry.id }, data: { attempts } });
+    if (attempts >= maxAttempts) {
+      await lockOtp(phone, lockoutMinutes);
     }
     return null;
   }
-  entry.used = true;
-  writeJson(otpPath, items);
-  const session: OtpSession = {
-    token: nanoid(32),
-    phone,
-    expiresAt: new Date(Date.now() + sessionTtlMinutes * 60 * 1000).toISOString()
-  };
-  const sessions = readJson<OtpSession[]>(sessionPath, []);
-  writeJson(sessionPath, [session, ...sessions].slice(0, 200));
-  return session.token;
+
+  await prisma.otpCode.update({ where: { id: entry.id }, data: { used: true } });
+  const token = nanoid(32);
+  await prisma.otpSession.create({
+    data: {
+      token,
+      phone,
+      expiresAt: new Date(now + sessionTtlMinutes * 60 * 1000)
+    }
+  });
+  return token;
 }
 
-export function validateOtpToken(token: string, phone: string) {
-  const sessions = readJson<OtpSession[]>(sessionPath, []);
-  const match = sessions.find((s) => s.token === token && s.phone === phone);
-  if (!match) return false;
-  if (new Date(match.expiresAt).getTime() < Date.now()) return false;
+export async function validateOtpToken(token: string, phone: string) {
+  const prisma = getPrisma() as any;
+  const match = await prisma.otpSession.findUnique({ where: { token } });
+  if (!match || match.phone !== phone) return false;
+  if (match.expiresAt.getTime() < Date.now()) return false;
   return true;
 }
