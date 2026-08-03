@@ -44,6 +44,57 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://blend-landing-rug8
 
 const PRODUCT_NAME_BN = "আইস পোর্টেবল ফ্যান প্রো";
 
+// ---------------------------------------------------------------------------
+// bKash / Nagad
+//
+// There are two independent payment paths, and they need different data:
+//
+//   1. PAYMENT LINK  — paymentProviders.{bkash,nagad} shows a radio button that
+//      POSTs to /api/payment-link and redirects to a gateway URL. This requires
+//      paymentLinks.{bkash,nagad}. Enabling the provider WITHOUT a link is worse
+//      than leaving it off, so this script refuses to do it.
+//
+//   2. MANUAL        — always visible. The buyer sends money to the merchant's
+//      own bKash/Nagad number, then uploads a proof screenshot for admin review.
+//      This requires merchant.{bkash,nagad} to be a real number. Live values are
+//      currently the placeholder "01XXXXXXXXX", which is shown to real customers.
+//
+// Supply whichever you use as environment variables — nothing is invented here:
+//   BKASH_NUMBER=01XXXXXXXXX  NAGAD_NUMBER=01XXXXXXXXX     (manual path)
+//   BKASH_PAYMENT_LINK=https://...  NAGAD_PAYMENT_LINK=https://...  (link path)
+// ---------------------------------------------------------------------------
+const BKASH_NUMBER = (process.env.BKASH_NUMBER || "").trim();
+const NAGAD_NUMBER = (process.env.NAGAD_NUMBER || "").trim();
+const BKASH_LINK = (process.env.BKASH_PAYMENT_LINK || "").trim();
+const NAGAD_LINK = (process.env.NAGAD_PAYMENT_LINK || "").trim();
+
+const BD_MOBILE = /^01[3-9]\d{8}$/;
+
+function checkNumber(label: string, value: string) {
+  if (!value) return;
+  if (!BD_MOBILE.test(value)) {
+    console.error(`${label} is not a valid Bangladeshi mobile number: ${JSON.stringify(value)}`);
+    console.error("Expected 11 digits starting 013-019, e.g. 01712345678.");
+    process.exit(1);
+  }
+}
+
+function checkLink(label: string, value: string) {
+  if (!value) return;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") throw new Error("not https");
+  } catch {
+    console.error(`${label} must be a valid https:// URL, got: ${JSON.stringify(value)}`);
+    process.exit(1);
+  }
+}
+
+checkNumber("BKASH_NUMBER", BKASH_NUMBER);
+checkNumber("NAGAD_NUMBER", NAGAD_NUMBER);
+checkLink("BKASH_PAYMENT_LINK", BKASH_LINK);
+checkLink("NAGAD_PAYMENT_LINK", NAGAD_LINK);
+
 // Every claim below is traceable to the merchant's own product description:
 // semiconductor cooling plate to 16°C, 29,000 RPM motor, 30 km/h wind speed,
 // 4000 mAh battery, and the 3-day replacement warranty in the product title.
@@ -182,15 +233,29 @@ const patch: Partial<SiteConfig> = {
     }
   ],
 
-  // Placeholder bank/mobile numbers were being shown to real customers on the
-  // manual-payment screen. Blanked so the UI hides them until they are real.
+  // Placeholder bank/mobile numbers ("Example Bank", "01XXXXXXXXX") were being
+  // shown to real customers on the manual-payment screen. Blanked unless a real
+  // value was supplied, so the UI hides them rather than displaying a fake.
   merchant: {
     bankName: "",
     accountName: "",
     accountNumber: "",
     branch: "",
-    bkash: "",
-    nagad: ""
+    bkash: BKASH_NUMBER,
+    nagad: NAGAD_NUMBER
+  },
+
+  paymentLinks: {
+    bkash: BKASH_LINK,
+    nagad: NAGAD_LINK,
+    rocket: ""
+  },
+
+  // Only enable a provider that actually has a link — see the note above.
+  paymentProviders: {
+    bkash: Boolean(BKASH_LINK),
+    nagad: Boolean(NAGAD_LINK),
+    rocket: false
   }
 };
 
@@ -263,6 +328,22 @@ async function main() {
   const next: SiteConfig = { ...current, ...patch, sections: applyFaq(current.sections) };
 
   console.log(APPLY ? "APPLYING content migration\n" : "DRY RUN — nothing will be written\n");
+
+  console.log("Payment configuration:");
+  for (const [name, num, link] of [
+    ["bKash", BKASH_NUMBER, BKASH_LINK],
+    ["Nagad", NAGAD_NUMBER, NAGAD_LINK]
+  ] as const) {
+    const parts: string[] = [];
+    parts.push(link ? "payment-link radio ENABLED" : "payment-link radio off (no link supplied)");
+    parts.push(num ? `manual payment shows ${num}` : "manual payment hides number (none supplied)");
+    console.log(`  ${name}: ${parts.join(" | ")}`);
+  }
+  if (!BKASH_LINK && !NAGAD_LINK && !BKASH_NUMBER && !NAGAD_NUMBER) {
+    console.log("  ! No bKash/Nagad values supplied — both stay off and COD remains the only");
+    console.log("    working checkout path. See the header of this file for the env vars.");
+  }
+  console.log("");
 
   let changes = 0;
   for (const key of Object.keys(patch) as Array<keyof SiteConfig>) {
