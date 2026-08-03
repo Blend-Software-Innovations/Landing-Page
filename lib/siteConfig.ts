@@ -187,7 +187,7 @@ export type SiteConfig = {
 
 export const defaultSections: SectionConfig[] = [
   { id: "section-hero", type: "hero", enabled: true, order: 1 },
-  { id: "section-offer", type: "offer", enabled: true, order: 2, settings: { text: "Limited stock — order today." } },
+  { id: "section-offer", type: "offer", enabled: true, order: 2, settings: { text: "সীমিত স্টক — আজই অর্ডার করুন।" } },
   { id: "section-countdown", type: "countdown", enabled: false, order: 3, settings: { endDate: "" } },
   { id: "section-gallery", type: "gallery", enabled: true, order: 4 },
   { id: "section-features", type: "features", enabled: true, order: 5 },
@@ -201,11 +201,13 @@ export const defaultSections: SectionConfig[] = [
     order: 9,
     settings: {
       items: [
-        { q: "How long is delivery?", a: "Dhaka: 24-48 hours. Outside Dhaka: 2-4 days." }
+        { q: "ডেলিভারিতে কত সময় লাগে?", a: "ঢাকার ভিতরে ২৪-৪৮ ঘণ্টা, ঢাকার বাইরে ২-৪ দিন।" },
+        { q: "পেমেন্ট কীভাবে করবো?", a: "ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা দিন। চাইলে বিকাশ বা নগদেও আগে পেমেন্ট করতে পারেন।" },
+        { q: "পণ্য পছন্দ না হলে কী হবে?", a: "ভুল বা ড্যামেজ পণ্য পেলে ডেলিভারির ৩ দিনের মধ্যে জানালে আমরা বদলে দেবো।" }
       ]
     }
   },
-  { id: "section-sticky", type: "sticky_buy", enabled: true, order: 10, settings: { text: "Order now — limited stock." } }
+  { id: "section-sticky", type: "sticky_buy", enabled: true, order: 10, settings: { text: "সীমিত স্টক — আজই অর্ডার করুন।" } }
 ];
 
 export function normalizeSections(sections?: SectionConfig[]) {
@@ -237,11 +239,13 @@ export const defaultConfig: SiteConfig = {
     youtube: ""
   },
   promoEnabled: true,
-  promoText: "Limited stock — Order today for fastest delivery.",
+  promoText: "সীমিত স্টক — দ্রুত ডেলিভারি পেতে আজই অর্ডার করুন।",
   brandName: "Our Store",
   tagline: "মানসম্পন্ন পণ্য, দ্রুত ডেলিভারি।",
   logoUrl: "",
-  footerText: "Secure checkout by Stripe. SMS confirmations by Twilio.",
+  // Naming the payment/SMS vendors here leaks stack details to customers and
+  // reads as an unfinished template.
+  footerText: "নিরাপদ চেকআউট, অর্ডার কনফার্মেশন SMS-এ।",
   topNotice: "লিমিটেড স্টক - আজই অর্ডার করুন",
   heroTitle: {
     en: "Quality products, delivered to your door.",
@@ -293,7 +297,7 @@ export const defaultConfig: SiteConfig = {
   deliverySlots: ["9 AM – 12 PM", "12 PM – 3 PM", "3 PM – 6 PM", "6 PM – 9 PM"],
   optionGroups: [],
   recommended: {},
-  productFeatures: ["Quality checked", "Fast delivery", "Easy returns"],
+  productFeatures: ["যাচাই করা মান", "দ্রুত ডেলিভারি", "সহজ রিটার্ন"],
   productHeading: {
     en: "Made for everyday use, built to last.",
     bn: "প্রতিদিনের ব্যবহারের জন্য, টেকসই মানের।"

@@ -6,7 +6,16 @@ class MyDocument extends Document {
     return (
       <Html lang="bn">
         <Head>
-          <meta name="theme-color" content="#0f172a" />
+          <meta name="theme-color" content="#0b0b0f" />
+          {/* Marks the document as JS-capable before first paint. Scroll-reveal
+              styles only hide content under `.js`, so setting this in an effect
+              instead would flash the content in and back out — and a failed
+              hydration would leave the page permanently blank. */}
+          <script
+            dangerouslySetInnerHTML={{
+              __html: "document.documentElement.classList.add('js')"
+            }}
+          />
         </Head>
         <body>
           {gtmId ? (

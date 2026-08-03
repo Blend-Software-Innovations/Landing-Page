@@ -44,7 +44,22 @@ export function useScrollReveal(deps: unknown[] = []) {
       { rootMargin: "0px 0px -10% 0px", threshold: 0.08 }
     );
     document.querySelectorAll(".reveal:not(.is-visible)").forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+
+    // Safety net: this is a storefront, so content staying invisible is far
+    // worse than an animation being skipped. If anything prevents the observer
+    // from firing, reveal everything still above the fold anyway.
+    const failsafe = window.setTimeout(() => {
+      document.querySelectorAll(".reveal:not(.is-visible)").forEach((el) => {
+        if (el.getBoundingClientRect().top < window.innerHeight) {
+          el.classList.add("is-visible");
+        }
+      });
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(failsafe);
+      observer.disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
