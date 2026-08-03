@@ -63,6 +63,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!config.paymentProviders?.[provider as "bkash" | "nagad" | "rocket"]) {
     return res.status(400).json({ error: "Payment provider is disabled" });
   }
+  // Bail out BEFORE reserving inventory and creating the order. This check used
+  // to run only after createOrder, so enabling a provider whose link was never
+  // configured left an orphaned order holding real stock for 72h and showed the
+  // buyer an error at the final step.
+  if (!config.paymentLinks?.[provider as "bkash" | "nagad" | "rocket"]) {
+    return res.status(400).json({ error: "Payment link not configured" });
+  }
 
   // Server-side pricing — client-sent unitPrice/total/fees are ignored.
   const items = await priceItems(config, payload.items, {
