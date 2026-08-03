@@ -1,4 +1,4 @@
-﻿
+
 import { useEffect, useMemo, useState } from "react";
 import type { GetServerSideProps } from "next";
 import Head from "next/head";
@@ -54,6 +54,7 @@ type UiCopy = {
   paymentRocket: string;
   paymentStripe: string;
   paymentManual: string;
+  paymentManualShort: string;
   manualNote: string;
   txnLabel: string;
   proofLabel: string;
@@ -145,6 +146,7 @@ const ui: Record<Lang, UiCopy> = {
     paymentRocket: "Pay with Rocket",
     paymentStripe: "Pay instantly with Stripe",
     paymentManual: "Manual payment (Bank / bKash / Nagad)",
+    paymentManualShort: "bKash / Nagad",
     manualNote: "Send the exact order amount and upload the payment screenshot.",
     txnLabel: "Transaction ID",
     proofLabel: "Payment screenshot",
@@ -233,7 +235,8 @@ const ui: Record<Lang, UiCopy> = {
     paymentNagad: "Nagad দিয়ে পেমেন্ট",
     paymentRocket: "Rocket দিয়ে পেমেন্ট",
     paymentStripe: "Stripe দিয়ে সাথে সাথে পেমেন্ট",
-    paymentManual: "ম্যানুয়াল পেমেন্ট (ব্যাংক / bKash / Nagad)",
+    paymentManual: "ম্যানুয়াল পেমেন্ট (ব্যাংক / বিকাশ / নগদ)",
+    paymentManualShort: "বিকাশ / নগদ",
     manualNote: "অর্ডার এমাউন্ট অনুযায়ী পেমেন্ট করে স্ক্রিনশট আপলোড করুন।",
     txnLabel: "ট্রান্স্যাকশন আইডি",
     proofLabel: "পেমেন্ট স্ক্রিনশট",
@@ -1606,17 +1609,29 @@ export default function Home({
                         checked={paymentMethod === "manual"}
                         onChange={() => setPaymentMethod("manual")}
                       />
-                      Manual
+                      {t.paymentManualShort}
                     </label>
                     {paymentMethod === "manual" && (
                       <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
                         <div className="font-semibold">{t.manualNote}</div>
-                        <div className="mt-2">Bank: {displayConfig.merchant.bankName}</div>
-                        <div>Account Name: {displayConfig.merchant.accountName}</div>
-                        <div>Account No: {displayConfig.merchant.accountNumber}</div>
-                        <div>Branch: {displayConfig.merchant.branch}</div>
-                        <div>bKash: {displayConfig.merchant.bkash}</div>
-                        <div>Nagad: {displayConfig.merchant.nagad}</div>
+                        {/* Only render details that are actually configured — an
+                            unset field used to print a dangling "Bank:" label. */}
+                        <div className="mt-2 space-y-0.5">
+                          {[
+                            ["বিকাশ", displayConfig.merchant.bkash],
+                            ["নগদ", displayConfig.merchant.nagad],
+                            ["Bank", displayConfig.merchant.bankName],
+                            ["Account Name", displayConfig.merchant.accountName],
+                            ["Account No", displayConfig.merchant.accountNumber],
+                            ["Branch", displayConfig.merchant.branch]
+                          ]
+                            .filter(([, value]) => Boolean(value))
+                            .map(([label, value]) => (
+                              <div key={label}>
+                                {label}: <span className="font-semibold text-ink">{value}</span>
+                              </div>
+                            ))}
+                        </div>
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
                           <input name="transactionId" className="rounded-lg border border-slate-200 px-3 py-2" placeholder={t.txnLabel} />
                           <input name="paidAmount" className="rounded-lg border border-slate-200 px-3 py-2" placeholder={t.paidAmountLabel} />

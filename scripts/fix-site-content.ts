@@ -117,7 +117,14 @@ const patch: Partial<SiteConfig> = {
   // payments at all.
   footerText: "ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা দিন।",
 
-  topNotice: "সীমিত স্টক — আজ অর্ডার করলে দ্রুত ডেলিভারি",
+  // Top promo bar. Was English ("Limited batch — Order today…") on a Bangla-first
+  // page, and "batch" is resin-pen language.
+  promoText: "সীমিত স্টক — আজ অর্ডার করলে দ্রুত ডেলিভারি",
+
+  topNotice: "ঢাকায় ২৪-৪৮ ঘণ্টায় ডেলিভারি • পণ্য হাতে পেয়ে টাকা দিন",
+
+  // Delivery slot labels were English-only on a Bangla-first page.
+  deliverySlots: ["সকাল ৯টা - দুপুর ১২টা", "দুপুর ১২টা - বিকাল ৩টা", "বিকাল ৩টা - সন্ধ্যা ৬টা", "সন্ধ্যা ৬টা - রাত ৯টা"],
 
   heroBadge: {
     en: "Semiconductor cooling — not just moving air",
@@ -198,6 +205,15 @@ const patch: Partial<SiteConfig> = {
     en: "Order now — limited stock",
     bn: "এখনই অর্ডার করুন — সীমিত স্টক"
   },
+
+  // Dormant resin-pen landmines. Neither renders today (the video section is
+  // disabled and the experiment is inactive), but both sit in the config ready
+  // to inject pen copy the moment someone toggles them on:
+  //   - youtubeUrl pointed at the pen craft video.
+  //   - experiments held a "Warm Tone" variant whose copy overrides heroTitle,
+  //     heroBody, promoText and finalCta with resin-pen text.
+  youtubeUrl: "",
+  experiments: [],
 
   // THE FUNCTIONAL BUG. optionGroups held one group whose label was
   // "Aerospace-Grade 29,000 RPM Motor" and whose three "options" were sentence
