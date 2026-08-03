@@ -55,6 +55,17 @@ const patch: Partial<SiteConfig> = {
   seoDescription:
     "সেমিকন্ডাক্টর কুলিং প্লেট মুহূর্তেই ১৬°C-এ নামে। ২৯,০০০ RPM মোটর, ৩০ km/h বাতাস, ৪০০০mAh ব্যাটারি। ঢাকায় ২৪-৪৮ ঘণ্টায় ডেলিভারি, পণ্য হাতে পেয়ে টাকা দিন।",
 
+  // brandName renders as the header logo, og:site_name and the footer copyright.
+  // It currently holds "Aerospace-Grade 29,000 RPM Motor" — a feature headline
+  // pasted into the brand field. tagline likewise held "High-Density 4000mAh
+  // Battery". Single-product landing page, so the product name is the brand.
+  brandName: "Ice Portable Fan Pro",
+  tagline: "পোর্টেবল কুলিং ফ্যান — ঢাকায় ২৪-৪৮ ঘণ্টায় ডেলিভারি",
+
+  // Named Stripe and Twilio to customers, and Stripe cannot process Bangladeshi
+  // payments at all.
+  footerText: "ক্যাশ অন ডেলিভারি — পণ্য হাতে পেয়ে টাকা দিন।",
+
   topNotice: "সীমিত স্টক — আজ অর্ডার করলে দ্রুত ডেলিভারি",
 
   heroBadge: {
@@ -137,6 +148,40 @@ const patch: Partial<SiteConfig> = {
     bn: "এখনই অর্ডার করুন — সীমিত স্টক"
   },
 
+  // THE FUNCTIONAL BUG. optionGroups held one group whose label was
+  // "Aerospace-Grade 29,000 RPM Motor" and whose three "options" were sentence
+  // fragments of the marketing copy, split on commas:
+  //   "Engineered for extreme performance"
+  //   "the high-torque motor spins at a massive 29,000 RPM. ..."
+  //   "ensuring you stay dry and comfortable even in 100% humidity."
+  // The storefront requires every option group to be selected before checkout,
+  // so buyers were forced to pick one of these fragments to place an order, and
+  // the choice was recorded on the order. This product has a single SKU.
+  // Safe to clear: config.variants is empty and priceModifiers is {}, so no
+  // pricing depends on these groups.
+  optionGroups: [],
+  recommended: {},
+
+  // Dead fallback: it read 2000 while the active product sells for 680. The
+  // product's basePrice wins today, but the mismatch is a trap for whoever
+  // toggles multiProductEnabled off.
+  priceBdt: 680,
+
+  products: [
+    {
+      id: "default-product",
+      name: "Ice Portable Fan Pro",
+      subtitle: "১৬°C কুলিং প্লেট • ২৯,০০০ RPM • ৪০০০mAh",
+      description:
+        "সেমিকন্ডাক্টর কুলিং প্লেট কয়েক সেকেন্ডেই ১৬°C-এ নেমে আসে। ২৯,০০০ RPM মোটরে ৩০ km/h বাতাস আর ৪০০০mAh ব্যাটারিতে সারাদিনের ব্যাকআপ। ৩ দিনের রিপ্লেসমেন্ট ওয়ারেন্টি।",
+      basePrice: 680,
+      category: "Gadget",
+      stock: 20,
+      outOfStock: false,
+      badge: "বেস্ট সেলার"
+    }
+  ],
+
   // Placeholder bank/mobile numbers were being shown to real customers on the
   // manual-payment screen. Blanked so the UI hides them until they are real.
   merchant: {
@@ -186,7 +231,15 @@ function applyFaq(sections: SiteConfig["sections"]): SiteConfig["sections"] {
 
 function summarize(value: unknown): string {
   if (value === null || value === undefined) return String(value);
-  if (Array.isArray(value)) return `[${value.length} item(s)]`;
+  if (Array.isArray(value)) {
+    // Show the contents of short string arrays — a count alone hides a real
+    // change when the length happens to stay the same (e.g. productFeatures).
+    if (value.length && value.every((v) => typeof v === "string")) {
+      const joined = value.join(" | ");
+      return joined.length > 120 ? `[${value.length}] ${joined.slice(0, 120)}…` : `[${value.length}] ${joined}`;
+    }
+    return `[${value.length} item(s)]`;
+  }
   if (typeof value === "object") {
     const obj = value as Record<string, unknown>;
     // Show both sides of an {en, bn} pair — showing only one makes a real change
