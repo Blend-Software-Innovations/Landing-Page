@@ -4,8 +4,10 @@ class MyDocument extends Document {
   render() {
     const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
     return (
-      <Html lang="en">
-        <Head />
+      <Html lang="bn">
+        <Head>
+          <meta name="theme-color" content="#0f172a" />
+        </Head>
         <body>
           {gtmId ? (
             <noscript>

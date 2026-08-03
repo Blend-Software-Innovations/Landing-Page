@@ -27,10 +27,13 @@ const rolePermissions: Record<Exclude<AdminRole, "none">, AdminPermission[]> = {
     "media:write",
     "orders:read",
     "orders:write",
+    "orders:pack",
     "inventory:read",
     "inventory:write",
     "analytics:read",
-    "audit:read"
+    "audit:read",
+    "users:read",
+    "users:write"
   ],
   admin: [
     "config:read",
@@ -78,7 +81,9 @@ export async function resolveRole(req: NextApiRequest): Promise<AdminRole> {
   }
 }
 
-export async function resolveActor(req: NextApiRequest) {
+export async function resolveActor(
+  req: NextApiRequest
+): Promise<{ actor: string; role: AdminRole; sub?: string }> {
   const token = parseCookie(req, "access_token");
   if (!token) return { actor: "unknown", role: "none" as AdminRole };
   try {
@@ -86,7 +91,7 @@ export async function resolveActor(req: NextApiRequest) {
     const role = (payload.role as AdminRole) || "none";
     const sub = payload.sub as string | undefined;
     const user = sub ? await findUserById(sub) : null;
-    return { actor: user?.email || sub || "unknown", role };
+    return { actor: user?.email || sub || "unknown", role, sub };
   } catch {
     return { actor: "unknown", role: "none" as AdminRole };
   }

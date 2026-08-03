@@ -264,6 +264,48 @@ model AuditLog {
   @@index([createdAt])
 }
 
+// These three tables are accessed through raw SQL (lib/siteConfig.server.ts,
+// lib/audit.ts, lib/analytics.ts) rather than the Prisma client, but they MUST
+// stay declared here. When they were absent, `prisma migrate dev` treated them
+// as drift and generated a DROP (see 20260305193050_init), which silently
+// destroyed the live site config until it was restored by hand.
+model SiteConfigRow {
+  id        String   @id
+  data      Json
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  @@map("site_config")
+}
+
+model SiteConfigAudit {
+  id        String   @id
+  configId  String   @map("config_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  actor     String?
+  role      String?
+  ip        String?
+  note      String?
+  data      Json
+
+  @@index([configId], map: "site_config_audit_config_id_idx")
+  @@index([createdAt], map: "site_config_audit_created_at_idx")
+  @@map("site_config_audit")
+}
+
+model AnalyticsEventRow {
+  id        String   @id
+  eventName String   @map("event_name")
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  ip        String?
+  userAgent String?  @map("user_agent")
+  referrer  String?
+
+  @@index([createdAt], map: "analytics_events_created_at_idx")
+  @@index([eventName], map: "analytics_events_event_name_idx")
+  @@map("analytics_events")
+}
+
 model AbandonedCheckout {
   id            String   @id @default(cuid())
   name          String?

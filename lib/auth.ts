@@ -127,7 +127,13 @@ export async function rotateRefreshToken(token: string) {
   if (!jti || !userId) return null;
 
   const record = await prisma.refreshToken.findUnique({ where: { id: jti } });
-  if (!record || record.userId !== userId || record.revoked) return null;
+  if (!record || record.userId !== userId) return null;
+  if (record.revoked) {
+    // Reuse of an already-rotated token means it was stolen (or the legitimate session was) —
+    // invalidate the whole token family so neither party can keep refreshing.
+    await prisma.refreshToken.updateMany({ where: { userId }, data: { revoked: true } });
+    return null;
+  }
   if (record.expiresAt.getTime() < Date.now()) return null;
 
   await prisma.refreshToken.update({ where: { id: jti }, data: { revoked: true } });
@@ -184,7 +190,10 @@ export async function resetPassword(token: string, newPassword: string) {
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await prisma.$transaction([
     prisma.adminUser.update({ where: { id: record.userId }, data: { passwordHash } }),
-    prisma.passwordReset.update({ where: { tokenHash }, data: { used: true } })
+    prisma.passwordReset.update({ where: { tokenHash }, data: { used: true } }),
+    // A password reset must terminate every existing session — otherwise an attacker
+    // holding a stolen refresh token survives the victim's reset.
+    prisma.refreshToken.updateMany({ where: { userId: record.userId }, data: { revoked: true } })
   ]);
   return true;
 }

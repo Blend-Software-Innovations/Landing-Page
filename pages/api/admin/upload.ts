@@ -3,11 +3,11 @@ import { logger } from "../../../lib/logger";
 import formidable from "formidable";
 import os from "os";
 import { hasPermission, resolveRole } from "../../../lib/adminAuth";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { adminRateLimitPerMin } from "../../../lib/env";
 import { requireCsrf } from "../../../lib/csrf";
 import { requireDb } from "../../../lib/db";
-import { uploadImage } from "../../../lib/uploads";
+import { sniffImageType, uploadImage } from "../../../lib/uploads";
 
 export const config = {
   api: { bodyParser: false }
@@ -15,7 +15,7 @@ export const config = {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const role = await resolveRole(req);
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`admin-upload:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many uploads. Please try again shortly." });
   }
@@ -43,12 +43,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const proofFile = files.file as any;
     const file = Array.isArray(proofFile) ? proofFile[0] : proofFile;
     if (!file) return res.status(400).json({ error: "Missing file" });
-    if (!file.mimetype || !file.mimetype.startsWith("image/")) {
-      return res.status(400).json({ error: "Only image uploads are allowed." });
+    // The client-declared mimetype is attacker-controlled — sniff the actual bytes.
+    // Only raster formats pass; SVG (stored XSS vector) is rejected by design.
+    const type = sniffImageType(file.filepath);
+    if (!type) {
+      return res.status(400).json({ error: "Only JPEG, PNG or WebP image uploads are allowed." });
     }
 
     try {
-      const result = await uploadImage(file.filepath, file.originalFilename || "upload.jpg", "public");
+      const result = await uploadImage(file.filepath, `upload.${type.ext}`, "public");
       return res.status(200).json({ url: result.url, provider: result.provider });
     } catch (uploadError) {
       logger.error({ err: uploadError }, "Upload failed");

@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { hasPermission, resolveRole } from "../../../lib/adminAuth";
 import { requireCsrf } from "../../../lib/csrf";
 import { adminRateLimitPerMin } from "../../../lib/env";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { requireDb } from "../../../lib/db";
 import { getPrisma } from "../../../lib/prisma";
 import { resolveInventoryVariantId } from "../../../lib/inventory";
@@ -11,7 +11,7 @@ const EXPIRING_SOON_DAYS = 14;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const role = await resolveRole(req);
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`admin-batches:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }

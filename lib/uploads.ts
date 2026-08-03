@@ -108,6 +108,51 @@ async function uploadToLocal(filepath: string, filename: string, target: UploadT
   return { url, provider: "local" };
 }
 
+// Magic-byte sniffing — the client-declared mimetype is attacker-controlled, and
+// SVG/HTML disguised as an image becomes stored XSS when served from our origin.
+// Only raster formats are allowed anywhere user bytes are accepted.
+const IMAGE_SIGNATURES: Array<{ ext: string; mime: string; check: (buf: Buffer) => boolean }> = [
+  {
+    ext: "jpg",
+    mime: "image/jpeg",
+    check: (b) => b.length > 2 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
+  },
+  {
+    ext: "png",
+    mime: "image/png",
+    check: (b) =>
+      b.length > 7 &&
+      b[0] === 0x89 &&
+      b[1] === 0x50 &&
+      b[2] === 0x4e &&
+      b[3] === 0x47 &&
+      b[4] === 0x0d &&
+      b[5] === 0x0a &&
+      b[6] === 0x1a &&
+      b[7] === 0x0a
+  },
+  {
+    ext: "webp",
+    mime: "image/webp",
+    check: (b) => b.length > 11 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP"
+  }
+];
+
+export function sniffImageType(filepath: string): { ext: string; mime: string } | null {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(filepath, "r");
+    const header = Buffer.alloc(16);
+    fs.readSync(fd, header, 0, 16, 0);
+    const match = IMAGE_SIGNATURES.find((sig) => sig.check(header));
+    return match ? { ext: match.ext, mime: match.mime } : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
 export async function uploadImage(
   filepath: string,
   filename: string,

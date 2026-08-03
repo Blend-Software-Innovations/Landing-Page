@@ -1,6 +1,7 @@
 ﻿
 import { useEffect, useMemo, useState } from "react";
 import type { GetServerSideProps } from "next";
+import Head from "next/head";
 import Image from "next/image";
 import Layout from "../components/Layout";
 import Product from "../components/Product";
@@ -17,11 +18,8 @@ type UiCopy = {
   navReviews: string;
   navDemo: string;
   navCheckout: string;
-  heroBadge: string;
   heroCtaPrimary: string;
   heroCtaSecondary: string;
-  heroHighlights: string[];
-  heroStats: Array<{ label: string; to: number; suffix: string }>;
   orderTitleBn: string;
   orderTitleEn: string;
   orderBody: string;
@@ -91,15 +89,8 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "Reviews",
     navDemo: "Demo",
     navCheckout: "Order",
-    heroBadge: "Sahariar's Pen - Handmade Resin",
-    heroCtaPrimary: "Order Your Pen",
-    heroCtaSecondary: "See the craft",
-    heroHighlights: ["Handmade in Bangladesh", "Unique resin patterns", "Gift-ready packaging"],
-    heroStats: [
-      { label: "Handcrafted units", to: 1500, suffix: "+" },
-      { label: "Customer rating", to: 4.9, suffix: "/5" },
-      { label: "Unique designs", to: 100, suffix: "%" }
-    ],
+    heroCtaPrimary: "Order Now",
+    heroCtaSecondary: "See the product",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "Fill in your details to receive a secure payment link and instant SMS confirmation.",
@@ -167,15 +158,8 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "রিভিউ",
     navDemo: "ডেমো",
     navCheckout: "অর্ডার",
-    heroBadge: "Sahariar's Pen - Handmade Resin",
-    heroCtaPrimary: "আপনার পেন অর্ডার করুন",
-    heroCtaSecondary: "কাজটি দেখুন",
-    heroHighlights: ["বাংলাদেশে হাতে তৈরি", "ইউনিক রেজিন প্যাটার্ন", "গিফট-রেডি প্যাকেজিং"],
-    heroStats: [
-      { label: "হ্যান্ডক্রাফটেড", to: 1500, suffix: "+" },
-      { label: "রেটিং", to: 4.9, suffix: "/5" },
-      { label: "ইউনিক ডিজাইন", to: 100, suffix: "%" }
-    ],
+    heroCtaPrimary: "এখনই অর্ডার করুন",
+    heroCtaSecondary: "পণ্যটি দেখুন",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "আপনার তথ্য দিন, আমরা সিকিউর পেমেন্ট লিংক পাঠাবো এবং পেমেন্টের পর SMS কনফার্মেশন যাবে।",
@@ -269,7 +253,8 @@ function saveCart(items: CartItem[]) {
   window.localStorage.setItem(CART_KEY, JSON.stringify(items));
 }
 function Counter({ to, suffix = "", locale }: { to: number; suffix?: string; locale: "en-BD" | "bn-BD" }) {
-  const [value, setValue] = useState(0);
+  // Render the final value on the server / before hydration; animate from 0 only after mount.
+  const [value, setValue] = useState(to);
   useEffect(() => {
     let frame = 0;
     const start = performance.now();
@@ -584,7 +569,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const cartSubtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const effectiveSubtotal = cart.length ? cartSubtotal : unitPrice * quantity;
   const totalQuantity = cart.length ? cart.reduce((sum, item) => sum + item.quantity, 0) : quantity;
-  const giftWrapFee = giftWrap ? 120 : 0;
+  const giftWrapFee = giftWrap ? displayConfig.giftWrapFee ?? 120 : 0;
   const totalWeight = cart.length
     ? cart.reduce((sum, item) => sum + item.weightPerUnit * item.quantity, 0)
     : currentItem.weightPerUnit * currentItem.quantity;
@@ -963,9 +948,62 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   }, [displayConfig.reviews, lang]);
 
   const sections = normalizeSections(displayConfig.sections);
+
+  const canonicalBase = (displayConfig.siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  const schemaProduct =
+    displayConfig.products?.find((product) => product.id === displayConfig.activeProductId) ||
+    displayConfig.products?.[0] ||
+    null;
+  const schemaImagePath = displayConfig.signatureImage || displayConfig.seoImage || "";
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: schemaProduct?.name || displayConfig.productCardTitle.en,
+    description: displayConfig.seoDescription,
+    // schema.org requires an absolute image URL; emitting a relative path makes
+    // the whole Product entity invalid, so omit it until siteUrl is configured.
+    ...(schemaImagePath && (canonicalBase || /^https?:\/\//.test(schemaImagePath))
+      ? { image: /^https?:\/\//.test(schemaImagePath) ? schemaImagePath : `${canonicalBase}${schemaImagePath}` }
+      : {}),
+    ...((displayConfig.googleRating ?? 0) > 0 && (displayConfig.googleReviewCount ?? 0) > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: displayConfig.googleRating,
+            reviewCount: displayConfig.googleReviewCount
+          }
+        }
+      : {}),
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "BDT",
+      price: schemaProduct?.basePrice ?? displayConfig.priceBdt,
+      availability:
+        schemaProduct && (schemaProduct.outOfStock || schemaProduct.stock <= 0)
+          ? "https://schema.org/OutOfStock"
+          : "https://schema.org/InStock",
+      ...(canonicalBase ? { url: canonicalBase } : {})
+    }
+  };
+  const faqItems: Array<{ q: string; a: string }> = sections.find((s) => s.type === "faq")?.settings?.items || [];
+  const faqJsonLd = faqItems.length
+    ? {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: faqItems.map((item) => ({
+          "@type": "Question",
+          name: item.q,
+          acceptedAnswer: { "@type": "Answer", text: item.a }
+        }))
+      }
+    : null;
+
   const renderSection = (type: string) => {
     switch (type) {
-      case "hero":
+      case "hero": {
+        const heroBadgeText = lang === "bn" ? displayConfig.heroBadge?.bn : displayConfig.heroBadge?.en;
+        const heroHighlights = displayConfig.heroHighlights ?? [];
+        const heroStats = displayConfig.heroStats ?? [];
         return (
           <>
             <section className="section pt-6">
@@ -977,9 +1015,11 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
             <section className="section pt-10 pb-16">
               <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] items-center">
                 <div className="space-y-6">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-soft border border-slate-200">
-                    {t.heroBadge}
-                  </div>
+                  {heroBadgeText ? (
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-soft border border-slate-200">
+                      {heroBadgeText}
+                    </div>
+                  ) : null}
                   <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-slate-900 leading-tight tracking-tight">
                     {lang === "bn" ? displayConfig.heroTitle.bn : displayConfig.heroTitle.en}
                   </h1>
@@ -997,24 +1037,32 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                       {lang === "bn" ? displayConfig.heroCtaSecondary.bn : displayConfig.heroCtaSecondary.en}
                     </a>
                   </div>
-                  <div className="grid gap-4 pt-2 sm:grid-cols-3">
-                    {t.heroStats.map((stat) => (
-                      <div key={stat.label} className="rounded-2xl bg-white p-4 shadow-soft border border-slate-200">
-                        <div className="text-2xl font-semibold text-slate-900">
-                          <Counter to={stat.to} suffix={stat.suffix} locale={lang === "bn" ? "bn-BD" : "en-BD"} />
+                  {heroStats.length ? (
+                    <div className="grid gap-4 pt-2 sm:grid-cols-3">
+                      {heroStats.map((stat) => (
+                        <div key={stat.labelEn} className="rounded-2xl bg-white p-4 shadow-soft border border-slate-200">
+                          <div className="text-2xl font-semibold text-slate-900">
+                            <Counter to={stat.value} suffix={stat.suffix} locale={lang === "bn" ? "bn-BD" : "en-BD"} />
+                          </div>
+                          <div className="text-xs uppercase tracking-wide text-slate-500">
+                            {lang === "bn" ? stat.labelBn : stat.labelEn}
+                          </div>
                         </div>
-                        <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="card p-8 space-y-6">
-                  <div className="text-sm font-semibold text-slate-600">What you get</div>
-                  <ul className="space-y-3 text-slate-700">
-                    {t.heroHighlights.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
+                  {heroHighlights.length ? (
+                    <>
+                      <div className="text-sm font-semibold text-slate-600">What you get</div>
+                      <ul className="space-y-3 text-slate-700">
+                        {heroHighlights.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
                   <div className="rounded-2xl bg-slate-900 text-white p-6">
                     <div className="text-sm uppercase tracking-wide text-white/70">Today's price</div>
                     <div className="text-3xl font-semibold mt-2">BDT {total.toLocaleString("en-BD")}</div>
@@ -1025,6 +1073,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
             </section>
           </>
         );
+      }
       case "offer": {
         const offerText = sections.find((s) => s.type === "offer")?.settings?.text || displayConfig.promoText;
         return (
@@ -1049,29 +1098,39 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
           </section>
         );
       }
-      case "gallery":
+      case "gallery": {
+        // Nothing to show until real photos are uploaded — an empty frame or a
+        // broken image costs more trust than omitting the section.
+        const heroImage = variantImageUrl || displayConfig.gallery[0]?.url || displayConfig.signatureImage;
+        if (!heroImage) return null;
         return (
           <section className="section pb-14">
             <div className="card p-8 md:p-10">
               <div className="grid gap-10 lg:grid-cols-[0.7fr_1.3fr] items-center">
                 <div className="space-y-5">
                   <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
-                    Media Library
+                    {lang === "bn" ? "ছবি" : "Photos"}
                   </div>
                   <div className="space-y-3">
-                    <h2 className="text-3xl md:text-4xl font-semibold text-slate-900">Real product photos</h2>
-                    <p className="text-slate-600">Each product is unique. These are real photos from recent batches.</p>
+                    <h2 className="text-3xl md:text-4xl font-semibold text-slate-900">
+                      {lang === "bn" ? "পণ্যের আসল ছবি" : "Real product photos"}
+                    </h2>
+                    <p className="text-slate-600">
+                      {lang === "bn"
+                        ? "সাম্প্রতিক ব্যাচ থেকে তোলা ছবি — যা দেখছেন, তাই পাবেন।"
+                        : "Photographed from recent stock — what you see is what ships."}
+                    </p>
                   </div>
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <button
                     type="button"
-                    onClick={() => setLightboxSrc(variantImageUrl || displayConfig.gallery[0]?.url || "")}
+                    onClick={() => setLightboxSrc(heroImage)}
                     className="md:row-span-2 md:col-span-2 rounded-3xl overflow-hidden border border-slate-200 bg-slate-100 relative text-left"
                   >
                     <Image
-                      src={variantImageUrl || displayConfig.gallery[0]?.url || "/gallery/gallery-main.png"}
-                      alt={displayConfig.gallery[0]?.caption || "Resin pen showcase"}
+                      src={heroImage}
+                      alt={displayConfig.gallery[0]?.caption || `${displayConfig.brandName} product showcase`}
                       className="h-full w-full object-cover"
                       width={1200}
                       height={900}
@@ -1102,6 +1161,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
             )}
           </section>
         );
+      }
       case "features":
         return (
           <>
@@ -1146,7 +1206,9 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
             />
           </>
         );
-      case "reviews":
+      case "reviews": {
+        const hasGoogleRating = (displayConfig.googleRating ?? 0) > 0 && (displayConfig.googleReviewCount ?? 0) > 0;
+        if (!localizedReviews.length && !hasGoogleRating) return null;
         return (
           <Reviews
             heading={lang === "bn" ? displayConfig.reviewsHeading.bn : displayConfig.reviewsHeading.en}
@@ -1157,8 +1219,10 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
             googleReviewUrl={displayConfig.googleReviewUrl}
           />
         );
+      }
       case "video":
-        return <Video heading="Video" description="Craft video" videoUrl={displayConfig.youtubeUrl} />;
+        if (!displayConfig.youtubeUrl) return null;
+        return <Video heading="Video" description="Product video" videoUrl={displayConfig.youtubeUrl} />;
       case "order":
         return (
           <section id="order" className="section py-20">
@@ -1554,6 +1618,12 @@ return (
       logoUrl={displayConfig.logoUrl}
       footerText={displayConfig.footerText}
     >
+      <Head>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
+        {faqJsonLd ? (
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+        ) : null}
+      </Head>
       {sections.filter((s) => s.enabled).map((section) => (
         <div key={section.id}>{renderSection(section.type)}</div>
       ))}

@@ -17,14 +17,18 @@ services:
     build: .
     container_name: pen_app
     environment:
+      # Local development stack only — NOT a production template.
       NODE_ENV: production
       DATABASE_URL: postgresql://pen:penpass@db:5432/pen_landing
       # Local single-container setup migrates on boot; on App Platform a pre-deploy job does this.
       RUN_MIGRATIONS: "1"
-      AUTH_JWT_SECRET: change_me
-      AUTH_REFRESH_SECRET: change_me
-      AUTH_ADMIN_EMAIL: admin@example.com
-      AUTH_ADMIN_PASSWORD: password123
+      # Required, with no default on purpose: a committed signing key would be a
+      # forgeable JWT secret for anyone who runs this file as-is. Supply them
+      # from a local .env (compose substitutes ${VAR}) — boot fails if unset.
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in your local .env}
+      AUTH_REFRESH_SECRET: ${AUTH_REFRESH_SECRET:?set AUTH_REFRESH_SECRET in your local .env}
+      AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-admin@example.com}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:?set AUTH_ADMIN_PASSWORD in your local .env}
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
     ports:
       - "3000:3000"

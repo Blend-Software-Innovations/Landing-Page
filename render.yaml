@@ -4,7 +4,9 @@ services:
     env: node
     plan: starter
     buildCommand: "npm install && npm run build && npx prisma generate"
-    startCommand: "npx prisma migrate deploy && npx prisma db seed && npm run start"
+    # `npm run start` already runs `prisma migrate deploy`. Never add `prisma db
+    # seed` here — it would re-seed on every boot, not just first deploy.
+    startCommand: "npm run start"
     envVars:
       - key: NODE_ENV
         value: production
@@ -27,8 +29,9 @@ services:
       - key: AUTH_ADMIN_EMAIL
         value: "admin@example.com"
         sync: false
+      # No default: a placeholder password that boots is worse than a failed
+      # boot. Set this explicitly in the dashboard (min 8 chars).
       - key: AUTH_ADMIN_PASSWORD
-        value: "change_me"
         sync: false
       - key: AUTH_ALLOWLIST_ORIGINS
         value: ""

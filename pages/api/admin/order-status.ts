@@ -1,8 +1,8 @@
-﻿import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest, NextApiResponse } from "next";
 import { hasPermission, resolveActor } from "../../../lib/adminAuth";
 import { updateOrderStatus } from "../../../lib/orders";
 import { adminRateLimitPerMin } from "../../../lib/env";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { requireCsrf } from "../../../lib/csrf";
 import { requireDb } from "../../../lib/db";
 
@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!hasPermission(session.role, "orders:write") && !hasPermission(session.role, "orders:pack")) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`admin-order-status:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }

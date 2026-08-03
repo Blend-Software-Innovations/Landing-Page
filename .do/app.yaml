@@ -101,7 +101,16 @@ services:
       # ---- Public ----
       - key: NEXT_PUBLIC_SITE_URL
         scope: RUN_AND_BUILD_TIME
-        value: https://CHANGE_ME.ondigitalocean.app
+        value: https://blend-landing-rug8e.ondigitalocean.app
+      # App Platform LB + Cloudflare = 2 trusted proxy hops for client-IP
+      # derivation (rate limiting). See lib/rateLimit.ts getClientIp.
+      - key: TRUSTED_PROXY_HOPS
+        scope: RUN_TIME
+        value: "2"
+      # Global daily OTP SMS budget (anti SMS-pumping).
+      - key: OTP_DAILY_MAX
+        scope: RUN_TIME
+        value: "500"
       # ---- Optional: SENTRY_DSN, NEXT_PUBLIC_SENTRY_DSN, META_PIXEL_ID, META_CAPI_TOKEN,
       #      NEXT_PUBLIC_GTM_ID, NEXT_PUBLIC_GA4_ID, NEXT_PUBLIC_FB_PIXEL_ID
       # ---- Redis: only when scaling to 2+ instances ----

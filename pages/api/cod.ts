@@ -1,12 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
-import { isRateLimited } from "../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { createOrder } from "../../lib/orders";
 import { getConfig } from "../../lib/siteConfig.server";
 import { validateOtpToken } from "../../lib/otp";
 import { detectFraud } from "../../lib/fraud";
 import { getPrisma } from "../../lib/prisma";
+import { priceItems, computeOrderAmounts } from "../../lib/pricing";
 
 
 function normalizePhone(input: string) {
@@ -22,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`cod:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
@@ -37,6 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (existing) {
       return res.status(200).json({ status: "ok", orderId: existing.id, idempotent: true });
     }
+  }
+
+  // Cap order creation per phone as well as per IP — IPs rotate, phones don't.
+  const phoneKey = normalizePhone(String(payload.phone || ""));
+  if (phoneKey && (await isRateLimited(`orders:phone:${phoneKey}`, 5, 60 * 60_000))) {
+    return res.status(429).json({ error: "Too many orders from this phone. Please try again later." });
   }
 
   const otpToken = String(payload.otpToken || "");
@@ -58,35 +65,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(409).json({ error: "Duplicate transaction ID" });
   }
 
-  const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
-  const items = itemsRaw.length
-    ? itemsRaw.map((item: any) => ({
-        productId: String(item.productId || ""),
-        variantId: String(item.variantId || ""),
-        quantity: Number(item.quantity || 1),
-        unitPrice: Number(item.unitPrice || 0),
-        lineTotal: Number(item.unitPrice || 0) * Number(item.quantity || 1)
-      }))
-    : [
-        {
-          productId: String(payload.productId || ""),
-          variantId: String(payload.variantId || ""),
-          quantity: Number(payload.quantity || 1),
-          unitPrice: Math.round(Number(payload.total || 0) / Math.max(1, Number(payload.quantity || 1))),
-          lineTotal: Number(payload.total || 0)
-        }
-      ];
-
-  // --- Minimum order value (area-specific or global) ---
+  // Server-side pricing — client-sent unitPrice/total/fees are ignored.
+  const items = await priceItems(config, payload.items, {
+    productId: payload.productId,
+    variantId: payload.variantId,
+    quantity: payload.quantity,
+    optionValues: payload.selectedOptions
+  });
   const deliveryArea = String(payload.deliveryArea || "");
   const deliverySlot = String(payload.deliverySlot || "");
+  const amounts = computeOrderAmounts(config, items, {
+    deliveryArea,
+    deliveryZone: String(payload.deliveryZone || ""),
+    giftWrap: Boolean(payload.giftWrap)
+  });
+
+  // --- Minimum order value (area-specific or global) ---
   const areaCfg = config.deliveryAreas?.find((a) => a.name === deliveryArea);
   const minOrder = areaCfg?.minOrder ?? config.minOrderValue ?? 0;
-  const goodsSubtotal = items.reduce(
-    (sum: number, it: any) => sum + Number(it.unitPrice || 0) * Number(it.quantity || 0),
-    0
-  );
-  if (minOrder > 0 && goodsSubtotal < minOrder) {
+  if (minOrder > 0 && amounts.goodsSubtotal < minOrder) {
     return res.status(400).json({ error: `Minimum order is ${minOrder} for ${deliveryArea || "this area"}` });
   }
 
@@ -119,7 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     area: payload.area || "",
     deliveryArea: deliveryArea || undefined,
     deliverySlot: deliverySlot || undefined,
-    total: Number(payload.total || 0),
+    total: amounts.total,
     paymentMethod: "COD",
     paymentStatus: "UNPAID",
     transactionId: payload.transactionId || undefined,
@@ -131,8 +128,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     utm: payload.utm || undefined,
     productId: payload.productId || "",
     variantId: payload.variantId || "",
-    quantity: Number(payload.quantity || 1),
-    unitPrice: Math.round(Number(payload.total || 0) / Math.max(1, Number(payload.quantity || 1))),
+    quantity: items[0]?.quantity ?? 1,
+    unitPrice: items[0]?.unitPrice ?? 0,
     reservationIds,
     items: resolvedItems,
     status: "PENDING"

@@ -3,9 +3,11 @@ import { logger } from "../../lib/logger";
 import Stripe from "stripe";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { publicRateLimitPerMin } from "../../lib/env";
-import { isRateLimited } from "../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { getConfig } from "../../lib/siteConfig.server";
 import { validateOtpToken } from "../../lib/otp";
+import { priceItems, computeOrderAmounts } from "../../lib/pricing";
+import { signReservationIds } from "../../lib/reservationSig";
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-04-22.dahlia" }) : null;
@@ -29,11 +31,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const body = req.body as Record<string, unknown>;
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`checkout:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
-  const total = Number(body.total || 0);
   const quantity = Number(body.quantity || 1);
   const variantId = String(body.variantId || "");
   const productId = String(body.productId || "");
@@ -42,11 +43,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const phone = String(body.phone || "");
   const otpToken = String(body.otpToken || "");
   const deviceFingerprint = String(body.deviceFingerprint || "");
-  const giftWrapFee = Number(body.giftWrapFee || 0);
-  const shippingFee = Number(body.shippingFee || 0);
-  const discount = Number(body.discount || 0);
   const itemsRaw = Array.isArray(body.items) ? (body.items as Array<Record<string, unknown>>) : [];
   const shippingPartner = String(body.shippingPartner || "");
+
+  // Cap order creation per phone as well as per IP — IPs rotate, phones don't.
+  const phoneKey = normalizePhone(phone);
+  if (phoneKey && (await isRateLimited(`orders:phone:${phoneKey}`, 5, 60 * 60_000))) {
+    return res.status(429).json({ error: "Too many orders from this phone. Please try again later." });
+  }
 
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -60,31 +64,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(401).json({ error: "OTP verification required" });
       }
     }
-    const items = itemsRaw.length
-      ? itemsRaw.map((item) => ({
-          name: String(item.name || "Custom item"),
-          productId: String(item.productId || ""),
-          variantId: String(item.variantId || ""),
-          quantity: Number(item.quantity || 1),
-          unitPrice: Number(item.unitPrice || 0)
-        }))
-      : [
-          {
-            name: "Custom Order",
-            productId,
-            variantId,
-            quantity,
-            unitPrice: Number(body.unitPrice || Math.max(0, total))
-          }
-        ];
-
-    // --- Minimum order value (area-specific or global) ---
+    // Server-side pricing — client-sent unitPrice/total/fees are ignored.
+    const items = await priceItems(config, itemsRaw, {
+      productId,
+      variantId,
+      quantity,
+      optionValues: body.selectedOptions
+    });
     const deliveryArea = String(body.deliveryArea || "");
     const deliverySlot = String(body.deliverySlot || "");
+    const deliveryZone = String(body.deliveryZone || "");
+    const amounts = computeOrderAmounts(config, items, {
+      deliveryArea,
+      deliveryZone,
+      giftWrap: Boolean(body.giftWrap)
+    });
+
+    // --- Minimum order value (area-specific or global) ---
     const areaCfg = config.deliveryAreas?.find((a) => a.name === deliveryArea);
     const minOrder = areaCfg?.minOrder ?? config.minOrderValue ?? 0;
-    const goodsSubtotal = items.reduce((s, it) => s + Number(it.unitPrice || 0) * Number(it.quantity || 0), 0);
-    if (minOrder > 0 && goodsSubtotal < minOrder) {
+    if (minOrder > 0 && amounts.goodsSubtotal < minOrder) {
       return res.status(400).json({ error: `Minimum order is ${minOrder} for ${deliveryArea || "this area"}` });
     }
 
@@ -105,7 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       reservationIds.push(reservationId);
     }
 
-    const discountCents = Math.max(0, Math.round(discount * 100));
+    const discountCents = Math.max(0, Math.round(amounts.discount * 100));
     const lineItems = items.map((item, index) => {
       let unitAmount = Math.max(1, Math.round(item.unitPrice * 100));
       if (index === 0 && discountCents > 0) {
@@ -125,23 +124,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     });
 
-    if (giftWrapFee > 0) {
+    if (amounts.giftWrapFee > 0) {
       lineItems.push({
         price_data: {
           currency: "bdt",
           product_data: { name: "Gift wrap", description: "Gift-ready packaging" },
-          unit_amount: Math.max(1, Math.round(giftWrapFee * 100))
+          unit_amount: Math.max(1, Math.round(amounts.giftWrapFee * 100))
         },
         quantity: 1
       });
     }
 
-    if (shippingFee > 0) {
+    if (amounts.shippingFee > 0) {
       lineItems.push({
         price_data: {
           currency: "bdt",
           product_data: { name: "Shipping", description: "Delivery fee" },
-          unit_amount: Math.max(1, Math.round(shippingFee * 100))
+          unit_amount: Math.max(1, Math.round(amounts.shippingFee * 100))
         },
         quantity: 1
       });
@@ -152,8 +151,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       payment_method_types: ["card"],
       line_items: lineItems,
       customer_email: email || undefined,
-      success_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}&reservation_ids=${reservationIds.join(",")}`,
-      cancel_url: `${origin}/cancel?reservation_ids=${reservationIds.join(",")}`,
+      success_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}&reservation_ids=${reservationIds.join(",")}&rsig=${signReservationIds(reservationIds)}`,
+      cancel_url: `${origin}/cancel?reservation_ids=${reservationIds.join(",")}&rsig=${signReservationIds(reservationIds)}`,
       metadata: {
         name,
         email,
@@ -161,7 +160,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         reservationIds: reservationIds.join(","),
         productId,
         variantId,
-        unitPrice: String(Math.round(total / Math.max(1, quantity))),
+        unitPrice: String(items[0]?.unitPrice ?? 0),
         address: String(body.address || ""),
         city: String(body.city || ""),
         area: String(body.area || ""),
@@ -175,10 +174,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         shippingPartner,
         utm: JSON.stringify(body.utm || {}),
         selectedOptions: JSON.stringify(body.selectedOptions || {}),
-        cart: JSON.stringify(items),
-        discount: String(discount || 0),
-        giftWrapFee: String(giftWrapFee || 0),
-        shippingFee: String(shippingFee || 0)
+        cart: JSON.stringify(
+          items.map((item) => ({
+            name: item.name,
+            productId: item.productId,
+            variantId: item.variantId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice
+          }))
+        ),
+        discount: String(amounts.discount || 0),
+        giftWrapFee: String(amounts.giftWrapFee || 0),
+        shippingFee: String(amounts.shippingFee || 0)
       }
     });
 

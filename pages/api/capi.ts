@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import crypto from "crypto";
-import { isRateLimited } from "../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { applyCors } from "../../lib/cors";
 
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`capi:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
@@ -51,18 +51,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ...userData,
           fbp: fbp || undefined,
           fbc: fbc || undefined,
-          client_ip_address: req.headers["x-forwarded-for"] || req.socket.remoteAddress,
+          client_ip_address: getClientIp(req),
           client_user_agent: req.headers["user-agent"]
         },
         custom_data: payload || {}
       }
-    ]
+    ],
+    // The token goes in the POST body, never the URL — query strings end up in
+    // proxy/server logs and referer headers.
+    access_token: accessToken
   };
   if (testCode) {
     (capiPayload as any).test_event_code = testCode;
   }
 
-  const response = await fetch(`https://graph.facebook.com/v18.0/${pixelId}/events?access_token=${accessToken}`, {
+  const response = await fetch(`https://graph.facebook.com/v18.0/${pixelId}/events`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(capiPayload)

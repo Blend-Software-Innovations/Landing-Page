@@ -1,11 +1,17 @@
 ﻿import { z } from "zod";
 
+// A variable created in a dashboard and left blank arrives as "" — which
+// `.optional()` does NOT accept, and a single failing field would 500 the
+// entire app at import time. Treat empty strings as unset everywhere.
+const blankAsUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (value === "" ? undefined : value), schema);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  AUTH_ADMIN_EMAIL: z.string().email().optional(),
-  AUTH_ADMIN_PASSWORD: z.string().min(8).optional(),
-  AUTH_JWT_SECRET: z.string().min(16).optional(),
-  AUTH_REFRESH_SECRET: z.string().min(16).optional(),
+  AUTH_ADMIN_EMAIL: blankAsUndefined(z.string().email().optional()),
+  AUTH_ADMIN_PASSWORD: blankAsUndefined(z.string().min(8).optional()),
+  AUTH_JWT_SECRET: blankAsUndefined(z.string().min(16).optional()),
+  AUTH_REFRESH_SECRET: blankAsUndefined(z.string().min(16).optional()),
   AUTH_COOKIE_DOMAIN: z.string().optional(),
   AUTH_ALLOWLIST_ORIGINS: z.string().optional(),
   AUTH_RATE_LIMIT_PER_MIN: z.string().optional(),
@@ -41,7 +47,7 @@ const envSchema = z.object({
   PATHAO_BASE_URL: z.string().optional(),
   REDX_API_KEY: z.string().optional(),
   REDX_BASE_URL: z.string().optional(),
-  REDIS_URL: z.string().url().optional(),
+  REDIS_URL: blankAsUndefined(z.string().url().optional()),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
@@ -53,8 +59,8 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
-  SENTRY_DSN: z.string().url().optional(),
-  NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
+  SENTRY_DSN: blankAsUndefined(z.string().url().optional()),
+  NEXT_PUBLIC_SENTRY_DSN: blankAsUndefined(z.string().url().optional()),
   SENTRY_AUTH_TOKEN: z.string().optional(),
   SENTRY_ORG: z.string().optional(),
   SENTRY_PROJECT: z.string().optional()

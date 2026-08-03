@@ -1,4 +1,30 @@
+import type { NextApiRequest } from "next";
 import { logger } from "./logger";
+
+// ---------------------------------------------------------------------------
+// getClientIp — derive the client IP without trusting attacker-controlled
+// headers. X-Forwarded-For is appended to by each proxy hop, so the FIRST
+// entry is whatever the client sent and must never be used for rate limiting.
+// We take the entry TRUSTED_PROXY_HOPS from the right (default 1 = the address
+// the closest trusted proxy saw). Cloudflare's cf-connecting-ip is preferred
+// when present because Cloudflare strips any client-sent copy at its edge.
+// ---------------------------------------------------------------------------
+const trustedProxyHops = Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS || "1"));
+
+export function getClientIp(req: NextApiRequest): string {
+  const cfIp = req.headers["cf-connecting-ip"];
+  if (typeof cfIp === "string" && cfIp.trim()) return cfIp.trim();
+  const xff = req.headers["x-forwarded-for"];
+  const raw = Array.isArray(xff) ? xff.join(",") : xff || "";
+  const entries = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (entries.length >= trustedProxyHops) {
+    return entries[entries.length - trustedProxyHops];
+  }
+  return req.socket.remoteAddress || "unknown";
+}
 
 // ---------------------------------------------------------------------------
 // In-memory fallback store (used when REDIS_URL is not set)

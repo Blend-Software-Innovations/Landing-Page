@@ -1,14 +1,10 @@
 ﻿import Head from "next/head";
 import { ReactNode } from "react";
 
-const baseTitle = "Pen | A Smart Writing Experience";
-const baseDescription =
-  "Pen is a modern writing companion that blends precision hardware with cloud sync and focus tools.";
-
 export default function Layout({
   children,
-  title = baseTitle,
-  description = baseDescription,
+  title,
+  description,
   image,
   siteUrl,
   socials,
@@ -53,9 +49,11 @@ export default function Layout({
     reviews: labels?.reviews ?? "Reviews",
     demo: labels?.demo ?? "Demo",
     checkout: labels?.checkout ?? "Checkout",
-    subtitle: labels?.subtitle ?? "Precision writing, simplified."
+    subtitle: labels?.subtitle ?? "Quality products, delivered fast."
   };
-  const brand = brandName ?? "Sahariar's Pen";
+  const brand = brandName ?? "Our Store";
+  const pageTitle = title || brand;
+  const metaDescription = description || "";
   const footer = footerText ?? "Secure checkout by Stripe. SMS confirmations by Twilio.";
   const canonical =
     siteUrl?.replace(/\/$/, "") ||
@@ -68,14 +66,16 @@ export default function Layout({
   return (
     <>
       <Head>
-        <title>{title}</title>
-        <meta name="description" content={description} />
+        <title>{pageTitle}</title>
+        {metaDescription && <meta name="description" content={metaDescription} />}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="index, follow" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         {canonical && <link rel="canonical" href={canonical} />}
-        <meta property="og:title" content={title} />
-        <meta property="og:description" content={description} />
+        <meta property="og:title" content={pageTitle} />
+        {metaDescription && <meta property="og:description" content={metaDescription} />}
         <meta property="og:type" content="website" />
+        <meta property="og:locale" content="bn_BD" />
         {canonical && <meta property="og:url" content={canonical} />}
         {ogImage && <meta property="og:image" content={canonical ? `${canonical}${ogImage}` : ogImage} />}
         <meta property="og:site_name" content={brand} />
@@ -164,7 +164,7 @@ export default function Layout({
           <div className="section">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
               <span className="font-semibold text-white/90">
-                (c) {new Date().getFullYear()} Pen. All rights reserved.
+                (c) {new Date().getFullYear()} {brand}. All rights reserved.
               </span>
               <div className="flex flex-wrap items-center gap-3 text-white/80">
                 <span>{footer}</span>

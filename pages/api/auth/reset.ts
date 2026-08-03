@@ -1,8 +1,8 @@
-﻿import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest, NextApiResponse } from "next";
 import { applyCors } from "../../../lib/cors";
 import { resetPassword } from "../../../lib/auth";
 import { authRateLimitPerMin } from "../../../lib/env";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!applyCors(req, res)) return;
@@ -10,13 +10,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`auth-reset:${ip}`, authRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many attempts" });
   }
 
   const { token, newPassword } = req.body as { token?: string; newPassword?: string };
   if (!token || !newPassword) return res.status(400).json({ error: "Missing reset data" });
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  }
 
   const ok = await resetPassword(token, newPassword);
   if (!ok) return res.status(400).json({ error: "Invalid or expired token" });

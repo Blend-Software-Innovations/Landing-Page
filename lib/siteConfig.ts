@@ -83,6 +83,10 @@ export type SiteConfig = {
   topNotice: string;
   heroTitle: { en: string; bn: string };
   heroBody: { en: string; bn: string };
+  heroBadge?: { en: string; bn: string };
+  heroHighlights?: string[];
+  heroStats?: Array<{ value: number; suffix: string; labelEn: string; labelBn: string }>;
+  giftWrapFee?: number;
   heroCtaPrimary: { en: string; bn: string };
   heroCtaSecondary: { en: string; bn: string };
   finalCtaTitle: { en: string; bn: string };
@@ -183,7 +187,7 @@ export type SiteConfig = {
 
 export const defaultSections: SectionConfig[] = [
   { id: "section-hero", type: "hero", enabled: true, order: 1 },
-  { id: "section-offer", type: "offer", enabled: true, order: 2, settings: { text: "Limited batch — order today." } },
+  { id: "section-offer", type: "offer", enabled: true, order: 2, settings: { text: "Limited stock — order today." } },
   { id: "section-countdown", type: "countdown", enabled: false, order: 3, settings: { endDate: "" } },
   { id: "section-gallery", type: "gallery", enabled: true, order: 4 },
   { id: "section-features", type: "features", enabled: true, order: 5 },
@@ -197,9 +201,7 @@ export const defaultSections: SectionConfig[] = [
     order: 9,
     settings: {
       items: [
-        { q: "How long is delivery?", a: "Dhaka: 24-48 hours. Outside Dhaka: 2-4 days." },
-        { q: "Is there a warranty?", a: "Yes, 6-month replacement warranty." },
-        { q: "Can I request a custom color?", a: "Yes, choose a custom color during order." }
+        { q: "How long is delivery?", a: "Dhaka: 24-48 hours. Outside Dhaka: 2-4 days." }
       ]
     }
   },
@@ -223,10 +225,10 @@ export function normalizeSections(sections?: SectionConfig[]) {
 
 export const defaultConfig: SiteConfig = {
   siteUrl: "",
-  seoTitle: "Sahariar's Pen | Handmade Resin Pens",
+  seoTitle: "Online Store | Quality Products, Fast Delivery",
   seoDescription:
-    "Handmade, customizable resin pens crafted in Bangladesh. Unique designs, premium finish, and gift-ready packaging.",
-  seoImage: "/gallery/gallery-main.png",
+    "Shop quality products online in Bangladesh. Secure checkout, fast delivery, and friendly support.",
+  seoImage: "",
   social: {
     whatsapp: "",
     facebook: "",
@@ -235,49 +237,39 @@ export const defaultConfig: SiteConfig = {
     youtube: ""
   },
   promoEnabled: true,
-  promoText: "Limited batch — Order today for fastest delivery.",
-  brandName: "Sahariar's Pen",
-  tagline: "বাংলাদেশে হাতে বানানো রেজিন পেন।",
+  promoText: "Limited stock — Order today for fastest delivery.",
+  brandName: "Our Store",
+  tagline: "মানসম্পন্ন পণ্য, দ্রুত ডেলিভারি।",
   logoUrl: "",
   footerText: "Secure checkout by Stripe. SMS confirmations by Twilio.",
-  topNotice: "লিমিটেড ব্যাচ - কাস্টম রেজিন পেন প্রস্তুত",
+  topNotice: "লিমিটেড স্টক - আজই অর্ডার করুন",
   heroTitle: {
-    en: "A pen as unique as your handwriting.",
-    bn: "আপনার লেখার মতোই ইউনিক একটি পেন।"
+    en: "Quality products, delivered to your door.",
+    bn: "মানসম্পন্ন পণ্য, পৌঁছে যাবে আপনার দরজায়।"
   },
   heroBody: {
     en:
-      "Sahariar's Pen crafts custom resin pens with deep color, smooth balance, and a premium feel. Each piece is handmade and one of a kind.",
+      "We source quality products and deliver them across Bangladesh with secure checkout and instant confirmation.",
     bn:
-      "Sahariar's Pen বানায় কাস্টম রেজিন পেন - গভীর রঙ, স্মুথ ব্যালান্স আর প্রিমিয়াম ফিনিশ সহ। প্রতিটি পেন একেবারে ইউনিক।"
+      "আমরা মানসম্পন্ন পণ্য সংগ্রহ করে সারা বাংলাদেশে পৌঁছে দিই - সিকিউর চেকআউট আর সাথে সাথে কনফার্মেশন সহ।"
   },
-  heroCtaPrimary: { en: "Order Your Pen", bn: "আপনার পেন অর্ডার করুন" },
-  heroCtaSecondary: { en: "See the craft", bn: "কাজটি দেখুন" },
-  finalCtaTitle: { en: "Ready for a pen that feels special?", bn: "একটি স্পেশাল পেন নিতে প্রস্তুত?" },
+  heroBadge: { en: "", bn: "" },
+  heroHighlights: [],
+  heroStats: [],
+  giftWrapFee: 120,
+  heroCtaPrimary: { en: "Order Now", bn: "এখনই অর্ডার করুন" },
+  heroCtaSecondary: { en: "See the product", bn: "পণ্যটি দেখুন" },
+  finalCtaTitle: { en: "Ready to place your order?", bn: "অর্ডার করতে প্রস্তুত?" },
   finalCtaBody: {
     en: "Complete checkout in under 2 minutes. Instant SMS confirmation included.",
     bn: "২ মিনিটের মধ্যে চেকআউট শেষ করুন। সাথে সাথে SMS কনফার্মেশন পাবেন।"
   },
   finalCtaButton: { en: "Order Now - Limited Stock", bn: "এখনই অর্ডার করুন - সীমিত স্টক" },
-  priceBdt: 4999,
-  priceModifiers: {
-    "option-a": {
-      "Standard (140mm)": 0,
-      "Slim (135mm)": 100,
-      "Long (150mm)": 180
-    },
-    "option-b": {
-      Signature: 0,
-      Premium: 200,
-      "Gift Edition": 300
-    },
-    "option-c": {
-      Minimal: 0,
-      Marble: 150,
-      "Gold Flake": 250,
-      Glitter: 200
-    }
-  },
+  priceBdt: 1000,
+  // No option groups by default: a fresh store sells one simple product. The
+  // previous defaults described a specific product's variants, which then showed
+  // up underneath every other product the admin configured.
+  priceModifiers: {},
   shippingFees: {
     insideDhaka: 0,
     outsideDhaka: 120
@@ -299,89 +291,43 @@ export const defaultConfig: SiteConfig = {
   ],
   minOrderValue: 0,
   deliverySlots: ["9 AM – 12 PM", "12 PM – 3 PM", "3 PM – 6 PM", "6 PM – 9 PM"],
-  optionGroups: [
-    {
-      id: "option-a",
-      labelEn: "Option A",
-      labelBn: "অপশন A",
-      options: ["Standard (140mm)", "Slim (135mm)", "Long (150mm)"]
-    },
-    {
-      id: "option-b",
-      labelEn: "Option B",
-      labelBn: "অপশন B",
-      options: ["Signature", "Premium", "Gift Edition"]
-    },
-    {
-      id: "option-c",
-      labelEn: "Option C",
-      labelBn: "অপশন C",
-      options: ["Minimal", "Marble", "Gold Flake", "Glitter"]
-    }
-  ],
-  recommended: {
-    "option-a": ["Standard (140mm)"],
-    "option-b": ["Premium"],
-    "option-c": ["Gold Flake"]
-  },
-  productFeatures: ["Handmade finish", "Balanced weight", "Gift-ready box"],
+  optionGroups: [],
+  recommended: {},
+  productFeatures: ["Quality checked", "Fast delivery", "Easy returns"],
   productHeading: {
-    en: "Every pen is handcrafted, never mass-produced.",
-    bn: "প্রতিটি পেন হাতে তৈরি - কখনও মাস প্রোডাক্ট নয়।"
+    en: "Made for everyday use, built to last.",
+    bn: "প্রতিদিনের ব্যবহারের জন্য, টেকসই মানের।"
   },
-  productSubheading: { en: "Custom resin, premium feel", bn: "কাস্টম রেজিন, প্রিমিয়াম ফিল" },
+  productSubheading: { en: "Quality you can trust", bn: "বিশ্বাসযোগ্য মান" },
   productBody: {
     en:
-      "Resin pens are unique by nature. We pour, polish, and finish each pen by hand to create a smooth, balanced writing experience.",
+      "We check every item before dispatch so you receive exactly what you ordered, in perfect condition.",
     bn:
-      "রেজিন পেন স্বভাবগতভাবে ইউনিক। আমরা হাতে ঢেলে, পলিশ করে প্রতিটি পেন তৈরি করি যাতে লেখা হয় স্মুথ আর ব্যালান্সড।"
+      "ডিসপ্যাচের আগে প্রতিটি পণ্য যাচাই করা হয়, যাতে আপনি নিখুঁত অবস্থায় সঠিক পণ্যটি পান।"
   },
-  productCardTitle: { en: "Signature Resin Pen", bn: "সিগনেচার রেজিন পেন" },
+  productCardTitle: { en: "Featured Product", bn: "ফিচার্ড প্রোডাক্ট" },
   productCardBody: {
-    en: "Handmade resin body with polished finish and gift box.",
-    bn: "হাতে বানানো রেজিন বডি, পলিশ ফিনিশ ও গিফট বক্সসহ।"
+    en: "Quality product with careful packaging and fast delivery.",
+    bn: "মানসম্পন্ন পণ্য, যত্নসহ প্যাকেজিং ও দ্রুত ডেলিভারি।"
   },
   reviewsHeading: {
-    en: "Loved by gift buyers and creators",
-    bn: "গিফট ও ডেইলি রাইটিংয়ের জন্য সেরা পছন্দ"
+    en: "What customers say",
+    bn: "কাস্টমাররা যা বলছেন"
   },
   reviewsBody: {
-    en: "Real feedback from customers who chose Sahariar's Pen for daily writing and gifting.",
-    bn: "যারা Sahariar's Pen বেছে নিয়েছেন, তাদের আসল মতামত।"
+    en: "Real feedback from customers who ordered from our store.",
+    bn: "আমাদের স্টোর থেকে যারা অর্ডার করেছেন, তাদের আসল মতামত।"
   },
-  reviews: [
-    {
-      name: "Jordan Lee",
-      role: "Creative Director",
-      rating: 5,
-      bn: "রেজিন ফিনিশ একদম প্রিমিয়াম, হাতে ধরতেই ভালো লাগে।",
-      en: "The resin finish is stunning and feels premium in hand."
-    },
-    {
-      name: "Priya Shah",
-      role: "Founder, Bloom Lab",
-      rating: 5,
-      bn: "গিফট হিসেবে দিয়েছিলাম, সবাই খুব পছন্দ করেছে।",
-      en: "Gave it as a gift and they loved the custom look."
-    },
-    {
-      name: "Marco Alvarez",
-      role: "Product Designer",
-      rating: 4,
-      bn: "লিখতে অনেক স্মুথ, আর দেখতে দারুণ।",
-      en: "Smooth to write with and looks amazing on my desk."
-    }
-  ],
+  reviews: [],
   googleReviewUrl: "",
-  googleRating: 4.9,
-  googleReviewCount: 1500,
-  youtubeUrl: "https://www.youtube.com/embed/Ju4f6sc1rUo",
-  gallery: [
-    { url: "/gallery/gallery-blue-pen.png", caption: "Blue resin pen set" },
-    { url: "/gallery/gallery-pink-set.png", caption: "Pink glitter set" },
-    { url: "/gallery/gallery-rose-set.png", caption: "Rose resin set" }
-  ],
-  signatureImage: "/gallery/gallery-main.png",
+  googleRating: 0,
+  googleReviewCount: 0,
+  youtubeUrl: "",
+  // Empty by default — the bundled placeholder files are 68-byte stubs, and a
+  // broken <img> costs more trust than an absent gallery. The admin uploads real
+  // photos; the gallery and product-image slots stay hidden until then.
+  gallery: [],
+  signatureImage: "",
   deliveryPartners: ["Pathao", "Steadfast"],
   paymentProviders: {
     bkash: false,
@@ -395,37 +341,13 @@ export const defaultConfig: SiteConfig = {
   },
   merchant: {
     bankName: "Example Bank",
-    accountName: "Sahariar's Pen",
+    accountName: "Your Business",
     accountNumber: "123-456-789",
     branch: "Dhanmondi Branch",
     bkash: "01XXXXXXXXX",
     nagad: "01XXXXXXXXX"
   },
-  experiments: [
-    {
-      id: "hero-copy-1",
-      name: "Hero Copy Test",
-      active: false,
-      variants: [
-        { id: "control", name: "Control", weight: 50, copy: {} },
-        {
-          id: "warm",
-          name: "Warm Tone",
-          weight: 50,
-          copy: {
-            heroTitle: { en: "A handcrafted pen made just for you.", bn: "শুধু আপনার জন্য হাতে বানানো পেন।" },
-            heroBody: {
-              en: "Every resin pen is poured, polished, and balanced by hand. Gift‑ready and unforgettable.",
-              bn: "প্রতিটি রেজিন পেন হাতে ঢালা, পলিশ ও ব্যালান্স করা। গিফট‑রেডি এবং স্মরণীয়।"
-            },
-            finalCtaTitle: { en: "Ready to make it yours?", bn: "আপনারটা নিতে প্রস্তুত?" },
-            finalCtaButton: { en: "Order Now", bn: "এখনই অর্ডার করুন" },
-            promoText: "Limited batch — claim your custom pen today."
-          }
-        }
-      ]
-    }
-  ],
+  experiments: [],
   features: {
     inventoryEnabled: true,
     variantImagesEnabled: false,
@@ -442,11 +364,11 @@ export const defaultConfig: SiteConfig = {
   products: [
     {
       id: "default-product",
-      name: "Signature Resin Pen",
-      subtitle: "Handmade",
-      description: "Handmade resin pen with polished finish.",
-      basePrice: 4999,
-      category: "Resin",
+      name: "Featured Product",
+      subtitle: "Best seller",
+      description: "Quality product with careful packaging.",
+      basePrice: 1000,
+      category: "General",
       stock: 20,
       outOfStock: false,
       badge: "Best seller"

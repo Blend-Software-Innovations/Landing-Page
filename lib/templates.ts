@@ -93,14 +93,42 @@ export const templates: Template[] = [
 export function applyTemplate(baseConfig: SiteConfig, templateId: string): SiteConfig {
   const template = templates.find((item) => item.id === templateId);
   if (!template) return baseConfig;
+
+  // Switching template means switching product. Any product-specific copy the
+  // template does not itself supply must be cleared rather than carried over —
+  // otherwise the old product's reviews, FAQ, gallery captions and price
+  // modifiers survive underneath the new hero and the page contradicts itself.
+  const cleared: Partial<SiteConfig> = {
+    reviews: [],
+    googleRating: 0,
+    googleReviewCount: 0,
+    googleReviewUrl: "",
+    youtubeUrl: "",
+    experiments: [],
+    priceModifiers: {},
+    recommended: {},
+    variants: [],
+    variantImages: {},
+    gallery: [],
+    signatureImage: "",
+    heroBadge: { en: "", bn: "" },
+    heroHighlights: [],
+    heroStats: [],
+    products: [],
+    sections: base.sections
+  };
+
   return {
     ...baseConfig,
+    ...cleared,
     ...template.config,
-    heroTitle: { ...baseConfig.heroTitle, ...(template.config.heroTitle || {}) },
-    heroBody: { ...baseConfig.heroBody, ...(template.config.heroBody || {}) },
-    productHeading: { ...baseConfig.productHeading, ...(template.config.productHeading || {}) },
-    productSubheading: { ...baseConfig.productSubheading, ...(template.config.productSubheading || {}) },
-    productCardTitle: { ...baseConfig.productCardTitle, ...(template.config.productCardTitle || {}) },
-    productCardBody: { ...baseConfig.productCardBody, ...(template.config.productCardBody || {}) }
+    heroTitle: { ...base.heroTitle, ...(template.config.heroTitle || {}) },
+    heroBody: { ...base.heroBody, ...(template.config.heroBody || {}) },
+    productHeading: { ...base.productHeading, ...(template.config.productHeading || {}) },
+    productSubheading: { ...base.productSubheading, ...(template.config.productSubheading || {}) },
+    productCardTitle: { ...base.productCardTitle, ...(template.config.productCardTitle || {}) },
+    productCardBody: { ...base.productCardBody, ...(template.config.productCardBody || {}) },
+    productBody: { ...base.productBody, ...(template.config.productBody || {}) },
+    productFeatures: template.config.productFeatures || base.productFeatures
   };
 }

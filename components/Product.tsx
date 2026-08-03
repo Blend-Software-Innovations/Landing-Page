@@ -44,7 +44,7 @@
         <div className="card p-6">
           <img
             src={imageUrl}
-            alt="Signature resin pen"
+            alt={cardTitle}
             loading="lazy"
             className="w-full rounded-xl object-cover border border-slate-200"
           />

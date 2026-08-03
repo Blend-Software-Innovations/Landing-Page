@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getPrisma } from "../../lib/prisma";
 import { applyCors } from "../../lib/cors";
-import { isRateLimited } from "../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { requireDb } from "../../lib/db";
 
@@ -11,13 +11,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`track:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
   if (!requireDb(res)) return;
   const { orderId, phone } = req.body as { orderId?: string; phone?: string };
   if (!orderId || !phone) return res.status(400).json({ error: "Missing data" });
+
+  // Per-order attempt cap: without it, an attacker who knows an order id can rotate IPs
+  // and use this endpoint as a phone-number confirmation oracle.
+  if (await isRateLimited(`track:order:${orderId}`, 10, 60 * 60_000)) {
+    return res.status(429).json({ error: "Too many requests" });
+  }
 
   const prisma = getPrisma() as any;
   const order = await prisma.order.findFirst({
