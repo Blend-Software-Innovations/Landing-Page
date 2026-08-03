@@ -8,7 +8,7 @@
   price,
   priceNote,
   imageUrl,
-  badges = ["In-stock", "Fast delivery", "Easy return"],
+  badges = [],
   stockStatus
 }: {
   heading: string;
@@ -42,13 +42,17 @@
           </ul>
         </div>
         <div className="card p-6">
-          <img
-            src={imageUrl}
-            alt="Signature resin pen"
-            loading="lazy"
-            className="w-full rounded-xl object-cover border border-slate-200"
-          />
-          <div className="mt-6 space-y-3">
+          {/* No image configured yet — render nothing rather than an empty src,
+              which makes the browser re-request the page as the image. */}
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={cardTitle}
+              loading="lazy"
+              className="w-full rounded-xl object-cover border border-slate-200"
+            />
+          ) : null}
+          <div className={`space-y-3 ${imageUrl ? "mt-6" : ""}`}>
             <div className="text-xl font-semibold text-ink">{cardTitle}</div>
             <p className="text-slate-600">{cardDescription}</p>
             <div className="flex items-center gap-3">

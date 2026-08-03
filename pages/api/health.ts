@@ -17,6 +17,12 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     }
   } else {
     checks.db = "disabled";
+    // In production a missing/placeholder DATABASE_URL is exactly the
+    // misconfiguration the health check exists to catch — fail loudly instead
+    // of letting the platform route traffic to a DB-less instance.
+    if (process.env.NODE_ENV === "production") {
+      healthy = false;
+    }
   }
 
   return res

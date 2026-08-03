@@ -4,7 +4,7 @@ import Stripe from "stripe";
 import twilio from "twilio";
 import { commitInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { createOrder } from "../../lib/orders";
-import { isRateLimited } from "../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { requireDb } from "../../lib/db";
 import { detectFraud } from "../../lib/fraud";
@@ -34,11 +34,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (await isRateLimited(`webhook:${ip}`, publicRateLimitPerMin, 60_000)) {
-    return res.status(429).json({ error: "Too many requests" });
-  }
-
   if (!stripe || !webhookSecret) {
     return res.status(500).json({ error: "Stripe webhook not configured" });
   }
@@ -56,6 +51,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     event = stripe.webhooks.constructEvent(raw, sig, webhookSecret);
   } catch (error) {
     logger.error({ err: error }, "Webhook signature verification failed");
+    // Rate-limit only invalid-signature attempts. Signature verification runs first so
+    // junk traffic can never consume the budget and 429 genuine Stripe retries.
+    const ip = getClientIp(req);
+    if (await isRateLimited(`webhook:${ip}`, publicRateLimitPerMin, 60_000)) {
+      return res.status(429).json({ error: "Too many requests" });
+    }
     return res.status(400).json({ error: "Invalid signature" });
   }
 

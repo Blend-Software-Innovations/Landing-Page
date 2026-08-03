@@ -3,6 +3,7 @@ const { withSentryConfig } = require("@sentry/nextjs");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
   images: {
     // Allow next/image to optimize remote images from Cloudinary and DigitalOcean Spaces.
     // Without this, next/image returns 400 for these hosts and images appear broken.
@@ -42,10 +43,11 @@ const nextConfig = {
             "img-src 'self' data: blob: https:",
             "font-src 'self' data:",
             "connect-src 'self' https://www.google-analytics.com https://stats.g.doubleclick.net https://www.facebook.com https://api.stripe.com https://checkout.stripe.com https://sentry.io https://*.ingest.sentry.io",
-            "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com https://www.googletagmanager.com",
+            "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com https://www.googletagmanager.com https://www.youtube.com https://www.youtube-nocookie.com",
             "object-src 'none'",
             "base-uri 'self'",
-            "form-action 'self'"
+            "form-action 'self'",
+            "frame-ancestors 'none'"
           ].join("; ")
         }
       ]

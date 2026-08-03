@@ -10,10 +10,11 @@ export default function Cancel() {
     const reservationIds = String(router.query.reservation_ids || "");
     if (reservationId || reservationIds) {
       const ids = reservationIds ? reservationIds.split(",").filter(Boolean) : reservationId ? [reservationId] : [];
+      const rsig = String(router.query.rsig || "");
       fetch("/api/inventory/release", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reservationId, reservationIds: ids })
+        body: JSON.stringify({ reservationId, reservationIds: ids, rsig })
       }).catch(() => undefined);
     }
   }, [router.isReady, router.query.reservation_id]);

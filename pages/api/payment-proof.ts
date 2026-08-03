@@ -2,11 +2,12 @@ import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import formidable from "formidable";
 import os from "os";
-import { uploadImage } from "../../lib/uploads";
+import { uploadImage, sniffImageType } from "../../lib/uploads";
+import { priceItems, computeOrderAmounts } from "../../lib/pricing";
 import { reserveInventory, releaseInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { createOrder, updateOrderStatus } from "../../lib/orders";
 import { publicRateLimitPerMin } from "../../lib/env";
-import { isRateLimited } from "../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { notifyManualPaymentReview, writeOrderAudit } from "../../lib/notifications";
 import { getConfig } from "../../lib/siteConfig.server";
 import { validateOtpToken } from "../../lib/otp";
@@ -30,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`payment-proof:${ip}`, publicRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
@@ -59,31 +60,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(401).json({ error: "OTP verification required" });
         }
       }
+      // Cap order creation per phone as well as per IP — IPs rotate, phones don't.
+      const phoneKey = normalizePhone(String(payload.phone || ""));
+      if (phoneKey && (await isRateLimited(`orders:phone:${phoneKey}`, 5, 60 * 60_000))) {
+        return res.status(429).json({ error: "Too many orders from this phone. Please try again later." });
+      }
+
       const txnId = String(payload.transactionId || "").trim();
       const paidAmount = Number(payload.paidAmount || 0);
-      const total = Number(payload.total || 0);
       const txnRegex = /^[A-Z0-9]{8,20}$/i;
       if (!txnId || !txnRegex.test(txnId)) {
         return res.status(400).json({ error: "Invalid transaction ID" });
       }
-      const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
-      const items = itemsRaw.length
-        ? itemsRaw.map((item: any) => ({
-            productId: String(item.productId || ""),
-            variantId: String(item.variantId || ""),
-            quantity: Number(item.quantity || 1),
-            unitPrice: Number(item.unitPrice || 0),
-            lineTotal: Number(item.unitPrice || 0) * Number(item.quantity || 1)
-          }))
-        : [
-            {
-              productId: String(payload.productId || ""),
-              variantId: String(payload.variantId || ""),
-              quantity: Number(payload.quantity || 1),
-              unitPrice: Math.round(Number(payload.total || 0) / Math.max(1, Number(payload.quantity || 1))),
-              lineTotal: Number(payload.total || 0)
-            }
-          ];
+
+      // The declared mimetype is attacker-controlled; sniff the actual bytes and
+      // force a safe extension so no SVG/HTML lands on our origin.
+      const imageType = sniffImageType(file.filepath);
+      if (!imageType) {
+        return res.status(400).json({ error: "Payment proof must be a JPEG, PNG or WebP image" });
+      }
+
+      // Server-side pricing — client-sent unitPrice/total are ignored.
+      const items = await priceItems(config, payload.items, {
+        productId: payload.productId,
+        variantId: payload.variantId,
+        quantity: payload.quantity,
+        optionValues: payload.selectedOptions
+      });
+      const amounts = computeOrderAmounts(config, items, {
+        deliveryArea: String(payload.deliveryArea || ""),
+        deliveryZone: String(payload.deliveryZone || ""),
+        giftWrap: Boolean(payload.giftWrap)
+      });
+      const total = amounts.total;
 
       const reservationIds: string[] = [];
       const resolvedItems = [];
@@ -106,22 +115,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         reservationIds.push(reservationId);
         resolvedItems.push({ ...item, variantId: resolvedId });
       }
-      const upload = await uploadImage(file.filepath, file.originalFilename || "payment-proof.jpg", "public");
+      const upload = await uploadImage(file.filepath, `payment-proof.${imageType.ext}`, "public");
       const fraud = await detectFraud({
         phone: payload.phone || "",
         deviceFingerprint: payload.deviceFingerprint || "",
         transactionId: txnId
       });
       const duplicateTxn = fraud.flags.includes("txn_duplicate");
-      const amountMatch = paidAmount > 0 && total > 0 && paidAmount === total;
-      const manualStatus = duplicateTxn ? "REJECTED" : amountMatch ? "VERIFIED" : "PENDING";
+      // Never auto-verify: the claimed paid amount is client-declared, so a
+      // matching number proves nothing. Every non-duplicate submission goes to
+      // admin manual review (see admin/manual-payment-review).
+      const manualStatus = duplicateTxn ? "REJECTED" : "PENDING";
       const manualReviewedAt = manualStatus === "PENDING" ? null : new Date().toISOString();
-      const manualReviewNote = duplicateTxn
-        ? "Duplicate transaction ID"
-        : amountMatch
-        ? "Auto-verified by amount match"
-        : null;
-      const paymentStatus = manualStatus === "VERIFIED" ? "PAID" : manualStatus === "REJECTED" ? "UNPAID" : "PARTIAL";
+      const manualReviewNote = duplicateTxn ? "Duplicate transaction ID" : null;
+      const paymentStatus = manualStatus === "REJECTED" ? "UNPAID" : "PARTIAL";
       const order = await createOrder({
         customerName: payload.name || "",
         phone: payload.phone || "",
@@ -151,14 +158,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         paidAmount: paidAmount || undefined,
         utm: payload.utm || undefined
       });
-      if (manualStatus === "VERIFIED") {
-        await updateOrderStatus(order.id, "CONFIRMED", { role: "system" as any });
-      }
       if (manualStatus === "REJECTED") {
         await updateOrderStatus(order.id, "CANCELED", { role: "system" as any });
-      }
-      if (manualStatus === "VERIFIED" || manualStatus === "REJECTED") {
-        await notifyManualPaymentReview(order, manualStatus as "VERIFIED" | "REJECTED");
+        await notifyManualPaymentReview(order, "REJECTED");
       }
       await writeOrderAudit({
         orderId: order.id,

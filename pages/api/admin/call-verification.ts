@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { hasPermission, resolveRole } from "../../../lib/adminAuth";
 import { adminRateLimitPerMin } from "../../../lib/env";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { requireCsrf } from "../../../lib/csrf";
 import { requireDb } from "../../../lib/db";
 import { getPrisma } from "../../../lib/prisma";
@@ -12,7 +12,7 @@ const allowed = new Set(["VERIFIED", "UNVERIFIED", "PENDING"]);
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const role = await resolveRole(req);
   if (!hasPermission(role, "orders:write")) return res.status(401).json({ error: "Unauthorized" });
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`admin-call-verify:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests." });
   }

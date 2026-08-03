@@ -28,10 +28,11 @@ export default function Success() {
 
     if (reservationId || reservationIds) {
       const ids = reservationIds ? reservationIds.split(",").filter(Boolean) : reservationId ? [reservationId] : [];
+      const rsig = String(router.query.rsig || "");
       fetch("/api/inventory/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reservationId, reservationIds: ids })
+        body: JSON.stringify({ reservationId, reservationIds: ids, rsig })
       }).catch(() => undefined);
     }
 

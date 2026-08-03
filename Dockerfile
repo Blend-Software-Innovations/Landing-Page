@@ -4,9 +4,11 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # --- Dependencies
+# The lockfile is intentionally gitignored (App Platform's buildpack installs
+# fresh), so `npm ci` cannot run from a clean clone — use `npm install`.
 FROM base AS deps
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 # --- Build
 FROM base AS builder

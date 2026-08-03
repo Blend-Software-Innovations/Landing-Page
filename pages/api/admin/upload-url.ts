@@ -1,6 +1,6 @@
-﻿import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest, NextApiResponse } from "next";
 import { hasPermission, resolveRole } from "../../../lib/adminAuth";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { adminRateLimitPerMin } from "../../../lib/env";
 import { requireCsrf } from "../../../lib/csrf";
 import { requireDb } from "../../../lib/db";
@@ -11,9 +11,17 @@ function sanitizeName(input: string) {
   return input.replace(/[^\w.-]+/g, "-").toLowerCase();
 }
 
+// Only raster image types may be presigned — SVG/HTML served from the bucket origin
+// would be stored XSS. The object key extension is forced to match the content type.
+const allowedContentTypes: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp"
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const role = await resolveRole(req);
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`admin-upload-url:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests." });
   }
@@ -38,8 +46,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const body = req.body as { filename?: string; contentType?: string };
-  const filename = body?.filename ? sanitizeName(body.filename) : `upload-${Date.now()}.jpg`;
-  const contentType = body?.contentType || "application/octet-stream";
+  const contentType = String(body?.contentType || "");
+  const ext = allowedContentTypes[contentType];
+  if (!ext) {
+    return res.status(400).json({ error: "Unsupported content type. Allowed: image/jpeg, image/png, image/webp." });
+  }
+  const base = body?.filename ? sanitizeName(body.filename) : `upload-${Date.now()}`;
+  const filename = `${base.replace(/\.[^.]*$/, "")}.${ext}`;
   const key = `uploads/${Date.now()}-${filename}`;
 
   const client = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });

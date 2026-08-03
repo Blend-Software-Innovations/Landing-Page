@@ -1,11 +1,14 @@
 ﻿
 import { useEffect, useMemo, useState } from "react";
 import type { GetServerSideProps } from "next";
+import Head from "next/head";
 import Image from "next/image";
 import Layout from "../components/Layout";
 import Product from "../components/Product";
 import Reviews from "../components/Reviews";
 import Video from "../components/Video";
+import TrustBar from "../components/TrustBar";
+import { useJsFlag, useScrollReveal, useTilt } from "../lib/useMotion";
 import { SiteConfig, Experiment, ExperimentVariant, Review, normalizeSections } from "../lib/siteConfig";
 import { materializeVariants } from "../lib/variants";
 import { getConfig } from "../lib/siteConfig.server";
@@ -17,11 +20,8 @@ type UiCopy = {
   navReviews: string;
   navDemo: string;
   navCheckout: string;
-  heroBadge: string;
   heroCtaPrimary: string;
   heroCtaSecondary: string;
-  heroHighlights: string[];
-  heroStats: Array<{ label: string; to: number; suffix: string }>;
   orderTitleBn: string;
   orderTitleEn: string;
   orderBody: string;
@@ -62,6 +62,26 @@ type UiCopy = {
   deliveryOutside: string;
   selectProduct: string;
   productHint: string;
+  pricePrefix: string;
+  priceDeliveryNote: string;
+  priceOneTime: string;
+  whatYouGet: string;
+  trustCod: string;
+  trustCodNote: string;
+  trustDelivery: string;
+  trustDeliveryNote: string;
+  trustGenuine: string;
+  trustGenuineNote: string;
+  trustReturn: string;
+  trustReturnNote: string;
+  stickyOrder: string;
+  scrollHint: string;
+  giftWrapLabel: string;
+  consentLabel: string;
+  faqHeading: string;
+  badgeInStock: string;
+  badgeFastDelivery: string;
+  badgeEasyReturn: string;
   formName: string;
   formEmail: string;
   formPhone: string;
@@ -91,15 +111,8 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "Reviews",
     navDemo: "Demo",
     navCheckout: "Order",
-    heroBadge: "Sahariar's Pen - Handmade Resin",
-    heroCtaPrimary: "Order Your Pen",
-    heroCtaSecondary: "See the craft",
-    heroHighlights: ["Handmade in Bangladesh", "Unique resin patterns", "Gift-ready packaging"],
-    heroStats: [
-      { label: "Handcrafted units", to: 1500, suffix: "+" },
-      { label: "Customer rating", to: 4.9, suffix: "/5" },
-      { label: "Unique designs", to: 100, suffix: "%" }
-    ],
+    heroCtaPrimary: "Order Now",
+    heroCtaSecondary: "See the product",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "Fill in your details to receive a secure payment link and instant SMS confirmation.",
@@ -140,6 +153,26 @@ const ui: Record<Lang, UiCopy> = {
     deliveryOutside: "Outside Dhaka",
     selectProduct: "Select product",
     productHint: "Choose the product you want",
+    pricePrefix: "Price",
+    priceDeliveryNote: "Delivery charged separately by area",
+    priceOneTime: "One-time purchase",
+    whatYouGet: "What you get",
+    trustCod: "Cash on delivery",
+    trustCodNote: "Pay when you receive it",
+    trustDelivery: "24-48 hour delivery",
+    trustDeliveryNote: "Inside Dhaka",
+    trustGenuine: "100% genuine",
+    trustGenuineNote: "Checked before dispatch",
+    trustReturn: "Easy return",
+    trustReturnNote: "Wrong or damaged item",
+    stickyOrder: "Order now",
+    scrollHint: "Scroll to explore",
+    giftWrapLabel: "Gift wrap",
+    consentLabel: "Allow analytics & marketing cookies",
+    faqHeading: "Frequently asked questions",
+    badgeInStock: "In stock",
+    badgeFastDelivery: "Fast delivery",
+    badgeEasyReturn: "Easy return",
     formName: "Full name",
     formEmail: "Email address",
     formPhone: "Phone number",
@@ -167,15 +200,8 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "রিভিউ",
     navDemo: "ডেমো",
     navCheckout: "অর্ডার",
-    heroBadge: "Sahariar's Pen - Handmade Resin",
-    heroCtaPrimary: "আপনার পেন অর্ডার করুন",
-    heroCtaSecondary: "কাজটি দেখুন",
-    heroHighlights: ["বাংলাদেশে হাতে তৈরি", "ইউনিক রেজিন প্যাটার্ন", "গিফট-রেডি প্যাকেজিং"],
-    heroStats: [
-      { label: "হ্যান্ডক্রাফটেড", to: 1500, suffix: "+" },
-      { label: "রেটিং", to: 4.9, suffix: "/5" },
-      { label: "ইউনিক ডিজাইন", to: 100, suffix: "%" }
-    ],
+    heroCtaPrimary: "এখনই অর্ডার করুন",
+    heroCtaSecondary: "পণ্যটি দেখুন",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "আপনার তথ্য দিন, আমরা সিকিউর পেমেন্ট লিংক পাঠাবো এবং পেমেন্টের পর SMS কনফার্মেশন যাবে।",
@@ -216,6 +242,26 @@ const ui: Record<Lang, UiCopy> = {
     deliveryOutside: "ঢাকার বাইরে",
     selectProduct: "পণ্য নির্বাচন",
     productHint: "পছন্দের পণ্যটি বেছে নিন",
+    pricePrefix: "মূল্য",
+    priceDeliveryNote: "ডেলিভারি চার্জ এলাকা অনুযায়ী আলাদা",
+    priceOneTime: "একবারের পেমেন্ট",
+    whatYouGet: "যা যা পাচ্ছেন",
+    trustCod: "ক্যাশ অন ডেলিভারি",
+    trustCodNote: "পণ্য হাতে পেয়ে টাকা দিন",
+    trustDelivery: "২৪-৪৮ ঘণ্টায় ডেলিভারি",
+    trustDeliveryNote: "ঢাকার ভিতরে",
+    trustGenuine: "১০০% অরিজিনাল",
+    trustGenuineNote: "পাঠানোর আগে যাচাই করা",
+    trustReturn: "সহজ রিটার্ন",
+    trustReturnNote: "ভুল বা ড্যামেজ পণ্যে",
+    stickyOrder: "অর্ডার করুন",
+    scrollHint: "নিচে স্ক্রল করুন",
+    giftWrapLabel: "গিফট র‍্যাপ",
+    consentLabel: "অ্যানালিটিক্স ও মার্কেটিং কুকি অনুমোদন করুন",
+    faqHeading: "সাধারণ জিজ্ঞাসা",
+    badgeInStock: "স্টকে আছে",
+    badgeFastDelivery: "দ্রুত ডেলিভারি",
+    badgeEasyReturn: "সহজ রিটার্ন",
     formName: "পূর্ণ নাম",
     formEmail: "ইমেইল ঠিকানা",
     formPhone: "ফোন নম্বর",
@@ -269,7 +315,8 @@ function saveCart(items: CartItem[]) {
   window.localStorage.setItem(CART_KEY, JSON.stringify(items));
 }
 function Counter({ to, suffix = "", locale }: { to: number; suffix?: string; locale: "en-BD" | "bn-BD" }) {
-  const [value, setValue] = useState(0);
+  // Render the final value on the server / before hydration; animate from 0 only after mount.
+  const [value, setValue] = useState(to);
   useEffect(() => {
     let frame = 0;
     const start = performance.now();
@@ -388,16 +435,26 @@ function pickWeighted(variants: ExperimentVariant[]) {
   return variants[0];
 }
 
-type Props = { config: SiteConfig };
+type Props = { config: SiteConfig; stripeEnabled: boolean };
 
-export default function Home({ config, consent, setConsent }: Props & { consent?: "granted" | "denied"; setConsent?: (v: "granted" | "denied") => void }) {
+export default function Home({
+  config,
+  stripeEnabled,
+  consent,
+  setConsent
+}: Props & { consent?: "granted" | "denied"; setConsent?: (v: "granted" | "denied") => void }) {
   const [lang, setLang] = useState<Lang>("bn");
+  const heroTiltRef = useTilt<HTMLDivElement>(5);
+  useJsFlag();
+  useScrollReveal([lang]);
   const t = ui[lang];
   const [abVariant, setAbVariant] = useState<ExperimentVariant | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [giftWrap, setGiftWrap] = useState(false);
   const [cod, setCod] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual" | "bkash" | "nagad" | "rocket">("stripe");
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual" | "bkash" | "nagad" | "rocket">(
+    stripeEnabled ? "stripe" : "manual"
+  );
   const [otpId, setOtpId] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpToken, setOtpToken] = useState("");
@@ -584,7 +641,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   const cartSubtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const effectiveSubtotal = cart.length ? cartSubtotal : unitPrice * quantity;
   const totalQuantity = cart.length ? cart.reduce((sum, item) => sum + item.quantity, 0) : quantity;
-  const giftWrapFee = giftWrap ? 120 : 0;
+  const giftWrapFee = giftWrap ? displayConfig.giftWrapFee ?? 120 : 0;
   const totalWeight = cart.length
     ? cart.reduce((sum, item) => sum + item.weightPerUnit * item.quantity, 0)
     : currentItem.weightPerUnit * currentItem.quantity;
@@ -963,68 +1020,193 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
   }, [displayConfig.reviews, lang]);
 
   const sections = normalizeSections(displayConfig.sections);
+
+  const canonicalBase = (displayConfig.siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  const schemaProduct =
+    displayConfig.products?.find((product) => product.id === displayConfig.activeProductId) ||
+    displayConfig.products?.[0] ||
+    null;
+  const schemaImagePath = displayConfig.signatureImage || displayConfig.seoImage || "";
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: schemaProduct?.name || displayConfig.productCardTitle.en,
+    description: displayConfig.seoDescription,
+    // schema.org requires an absolute image URL; emitting a relative path makes
+    // the whole Product entity invalid, so omit it until siteUrl is configured.
+    ...(schemaImagePath && (canonicalBase || /^https?:\/\//.test(schemaImagePath))
+      ? { image: /^https?:\/\//.test(schemaImagePath) ? schemaImagePath : `${canonicalBase}${schemaImagePath}` }
+      : {}),
+    ...((displayConfig.googleRating ?? 0) > 0 && (displayConfig.googleReviewCount ?? 0) > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: displayConfig.googleRating,
+            reviewCount: displayConfig.googleReviewCount
+          }
+        }
+      : {}),
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "BDT",
+      price: schemaProduct?.basePrice ?? displayConfig.priceBdt,
+      availability:
+        schemaProduct && (schemaProduct.outOfStock || schemaProduct.stock <= 0)
+          ? "https://schema.org/OutOfStock"
+          : "https://schema.org/InStock",
+      ...(canonicalBase ? { url: canonicalBase } : {})
+    }
+  };
+  const faqItems: Array<{ q: string; a: string }> = sections.find((s) => s.type === "faq")?.settings?.items || [];
+  const faqJsonLd = faqItems.length
+    ? {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: faqItems.map((item) => ({
+          "@type": "Question",
+          name: item.q,
+          acceptedAnswer: { "@type": "Answer", text: item.a }
+        }))
+      }
+    : null;
+
   const renderSection = (type: string) => {
     switch (type) {
-      case "hero":
+      case "hero": {
+        const heroBadgeText = lang === "bn" ? displayConfig.heroBadge?.bn : displayConfig.heroBadge?.en;
+        const heroHighlights = displayConfig.heroHighlights ?? [];
+        const heroStats = displayConfig.heroStats ?? [];
+        const heroImage = variantImageUrl || displayConfig.gallery[0]?.url || displayConfig.signatureImage;
         return (
           <>
-            <section className="section pt-6">
-              <div className="rounded-2xl bg-white border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600">
-                {displayConfig.topNotice}
-              </div>
-            </section>
+            {displayConfig.topNotice ? (
+              <section className="section pt-6">
+                <div className="rounded-full border border-[color:var(--color-hairline)] bg-white px-5 py-2.5 text-center text-xs font-medium tracking-wide text-[color:var(--color-ink-soft)]">
+                  {displayConfig.topNotice}
+                </div>
+              </section>
+            ) : null}
 
-            <section className="section pt-10 pb-16">
-              <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] items-center">
-                <div className="space-y-6">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-soft border border-slate-200">
-                    {t.heroBadge}
-                  </div>
-                  <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-slate-900 leading-tight tracking-tight">
+            <section className="section pt-12 pb-14 md:pt-20">
+              <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
+                <div className="space-y-7">
+                  {heroBadgeText ? (
+                    <div className="reveal inline-flex items-center gap-2 rounded-full border border-[color:var(--color-hairline)] bg-white px-3.5 py-1.5 text-xs font-medium text-[color:var(--color-ink-soft)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-trust)]" />
+                      {heroBadgeText}
+                    </div>
+                  ) : null}
+                  <h1 className="reveal reveal-delay-1 text-[2.6rem] font-semibold leading-[1.08] tracking-[-0.03em] text-[color:var(--color-ink)] md:text-6xl lg:text-[4.25rem]">
                     {lang === "bn" ? displayConfig.heroTitle.bn : displayConfig.heroTitle.en}
                   </h1>
-                  <p className="text-lg md:text-xl text-slate-600">
+                  <p className="reveal reveal-delay-2 max-w-xl text-lg leading-relaxed text-[color:var(--color-ink-soft)] md:text-xl">
                     {lang === "bn" ? displayConfig.heroBody.bn : displayConfig.heroBody.en}
                   </p>
-                  <div className="flex flex-wrap gap-4">
+
+                  {/* Price stated before the CTA: hiding it until checkout is the
+                      single biggest reason a COD visitor bounces. */}
+                  <div className="reveal reveal-delay-2 flex flex-wrap items-end gap-x-4 gap-y-1">
+                    <div className="text-4xl font-semibold tracking-tight text-[color:var(--color-ink)] md:text-5xl">
+                      ৳{unitPrice.toLocaleString("en-BD")}
+                    </div>
+                    <div className="pb-1.5 text-sm text-[color:var(--color-ink-muted)]">{t.priceDeliveryNote}</div>
+                  </div>
+
+                  <div className="reveal reveal-delay-3 flex flex-wrap items-center gap-3">
                     <a
                       href="#order"
-                      className="relative rounded-full bg-gradient-to-r from-amber-500 via-rose-500 to-fuchsia-500 px-7 py-3 text-white font-semibold shadow-xl animate-order-shake"
+                      className="pressable rounded-full bg-[color:var(--color-ink)] px-8 py-4 text-base font-semibold text-white shadow-[var(--shadow-glow)]"
                     >
                       {lang === "bn" ? displayConfig.heroCtaPrimary.bn : displayConfig.heroCtaPrimary.en}
                     </a>
-                    <a href="#video" className="rounded-full border border-slate-300 bg-white px-6 py-3 text-slate-700 font-semibold">
+                    <a
+                      href="#product"
+                      className="pressable rounded-full border border-[color:var(--color-hairline)] bg-white px-7 py-4 text-base font-semibold text-[color:var(--color-ink)]"
+                    >
                       {lang === "bn" ? displayConfig.heroCtaSecondary.bn : displayConfig.heroCtaSecondary.en}
                     </a>
                   </div>
-                  <div className="grid gap-4 pt-2 sm:grid-cols-3">
-                    {t.heroStats.map((stat) => (
-                      <div key={stat.label} className="rounded-2xl bg-white p-4 shadow-soft border border-slate-200">
-                        <div className="text-2xl font-semibold text-slate-900">
-                          <Counter to={stat.to} suffix={stat.suffix} locale={lang === "bn" ? "bn-BD" : "en-BD"} />
+
+                  {heroStats.length ? (
+                    <div className="reveal grid gap-6 border-t border-[color:var(--color-hairline)] pt-6 sm:grid-cols-3">
+                      {heroStats.map((stat) => (
+                        <div key={stat.labelEn}>
+                          <div className="text-2xl font-semibold tracking-tight text-[color:var(--color-ink)]">
+                            <Counter to={stat.value} suffix={stat.suffix} locale={lang === "bn" ? "bn-BD" : "en-BD"} />
+                          </div>
+                          <div className="mt-0.5 text-xs text-[color:var(--color-ink-muted)]">
+                            {lang === "bn" ? stat.labelBn : stat.labelEn}
+                          </div>
                         </div>
-                        <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                <div className="card p-8 space-y-6">
-                  <div className="text-sm font-semibold text-slate-600">What you get</div>
-                  <ul className="space-y-3 text-slate-700">
-                    {t.heroHighlights.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                  <div className="rounded-2xl bg-slate-900 text-white p-6">
-                    <div className="text-sm uppercase tracking-wide text-white/70">Today's price</div>
-                    <div className="text-3xl font-semibold mt-2">BDT {total.toLocaleString("en-BD")}</div>
-                    <div className="text-sm text-white/80">Delivery fee based on zone</div>
+
+                <div className="tilt-scene reveal reveal-delay-2">
+                  <div ref={heroTiltRef} className="tilt-card card overflow-hidden p-0">
+                    {heroImage ? (
+                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-[color:var(--color-canvas)]">
+                        <Image
+                          src={heroImage}
+                          alt={displayConfig.gallery[0]?.caption || `${displayConfig.brandName} product`}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 1024px) 100vw, 520px"
+                          priority
+                        />
+                      </div>
+                    ) : null}
+                    <div className="tilt-layer space-y-5 p-7">
+                      {heroHighlights.length ? (
+                        <div className="space-y-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--color-ink-muted)]">
+                            {t.whatYouGet}
+                          </div>
+                          <ul className="space-y-2.5">
+                            {heroHighlights.map((item) => (
+                              <li key={item} className="flex items-start gap-2.5 text-[15px] text-[color:var(--color-ink-soft)]">
+                                <svg
+                                  viewBox="0 0 20 20"
+                                  aria-hidden="true"
+                                  className="mt-1 h-4 w-4 shrink-0 stroke-[color:var(--color-trust)]"
+                                  fill="none"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="m4.5 10.5 3.5 3.5 7.5-8" />
+                                </svg>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      <div className="rounded-2xl bg-[color:var(--color-ink)] p-6 text-white">
+                        <div className="text-xs uppercase tracking-[0.12em] text-white/60">{t.pricePrefix}</div>
+                        <div className="mt-1.5 text-3xl font-semibold tracking-tight">
+                          ৳{unitPrice.toLocaleString("en-BD")}
+                        </div>
+                        <div className="mt-1 text-sm text-white/70">{t.priceDeliveryNote}</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </section>
+
+            <TrustBar
+              items={[
+                { icon: "cod", title: t.trustCod, note: t.trustCodNote },
+                { icon: "delivery", title: t.trustDelivery, note: t.trustDeliveryNote },
+                { icon: "genuine", title: t.trustGenuine, note: t.trustGenuineNote },
+                { icon: "return", title: t.trustReturn, note: t.trustReturnNote }
+              ]}
+            />
           </>
         );
+      }
       case "offer": {
         const offerText = sections.find((s) => s.type === "offer")?.settings?.text || displayConfig.promoText;
         return (
@@ -1049,29 +1231,39 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
           </section>
         );
       }
-      case "gallery":
+      case "gallery": {
+        // Nothing to show until real photos are uploaded — an empty frame or a
+        // broken image costs more trust than omitting the section.
+        const heroImage = variantImageUrl || displayConfig.gallery[0]?.url || displayConfig.signatureImage;
+        if (!heroImage) return null;
         return (
           <section className="section pb-14">
             <div className="card p-8 md:p-10">
               <div className="grid gap-10 lg:grid-cols-[0.7fr_1.3fr] items-center">
                 <div className="space-y-5">
                   <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
-                    Media Library
+                    {lang === "bn" ? "ছবি" : "Photos"}
                   </div>
                   <div className="space-y-3">
-                    <h2 className="text-3xl md:text-4xl font-semibold text-slate-900">Real product photos</h2>
-                    <p className="text-slate-600">Each product is unique. These are real photos from recent batches.</p>
+                    <h2 className="text-3xl md:text-4xl font-semibold text-slate-900">
+                      {lang === "bn" ? "পণ্যের আসল ছবি" : "Real product photos"}
+                    </h2>
+                    <p className="text-slate-600">
+                      {lang === "bn"
+                        ? "সাম্প্রতিক ব্যাচ থেকে তোলা ছবি — যা দেখছেন, তাই পাবেন।"
+                        : "Photographed from recent stock — what you see is what ships."}
+                    </p>
                   </div>
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <button
                     type="button"
-                    onClick={() => setLightboxSrc(variantImageUrl || displayConfig.gallery[0]?.url || "")}
+                    onClick={() => setLightboxSrc(heroImage)}
                     className="md:row-span-2 md:col-span-2 rounded-3xl overflow-hidden border border-slate-200 bg-slate-100 relative text-left"
                   >
                     <Image
-                      src={variantImageUrl || displayConfig.gallery[0]?.url || "/gallery/gallery-main.png"}
-                      alt={displayConfig.gallery[0]?.caption || "Resin pen showcase"}
+                      src={heroImage}
+                      alt={displayConfig.gallery[0]?.caption || `${displayConfig.brandName} product showcase`}
                       className="h-full w-full object-cover"
                       width={1200}
                       height={900}
@@ -1102,6 +1294,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
             )}
           </section>
         );
+      }
       case "features":
         return (
           <>
@@ -1126,7 +1319,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                         <div className={`text-xs ${product.id === (selectedProductId || activeProduct?.id) ? "text-white/70" : "text-slate-500"}`}>
                           {product.subtitle}
                         </div>
-                        <div className="mt-2 text-lg font-semibold">BDT {product.basePrice.toLocaleString("en-BD")}</div>
+                        <div className="mt-2 text-lg font-semibold">৳{product.basePrice.toLocaleString("en-BD")}</div>
                       </button>
                     ))}
                   </div>
@@ -1138,15 +1331,24 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
               subheading={lang === "bn" ? displayConfig.productSubheading.bn : displayConfig.productSubheading.en}
               description={lang === "bn" ? displayConfig.productBody.bn : displayConfig.productBody.en}
               features={displayConfig.productFeatures || []}
-              cardTitle={activeProduct?.name || displayConfig.productCardTitle.en}
-              cardDescription={activeProduct?.description || displayConfig.productCardBody.en}
-              price={`BDT ${basePrice.toLocaleString("en-BD")}`}
-              priceNote="One-time purchase"
+              cardTitle={
+                activeProduct?.name ||
+                (lang === "bn" ? displayConfig.productCardTitle.bn : displayConfig.productCardTitle.en)
+              }
+              cardDescription={
+                activeProduct?.description ||
+                (lang === "bn" ? displayConfig.productCardBody.bn : displayConfig.productCardBody.en)
+              }
+              price={`৳${basePrice.toLocaleString("en-BD")}`}
+              priceNote={t.priceOneTime}
+              badges={[t.badgeInStock, t.badgeFastDelivery, t.badgeEasyReturn]}
               imageUrl={variantImageUrl || displayConfig.signatureImage}
             />
           </>
         );
-      case "reviews":
+      case "reviews": {
+        const hasGoogleRating = (displayConfig.googleRating ?? 0) > 0 && (displayConfig.googleReviewCount ?? 0) > 0;
+        if (!localizedReviews.length && !hasGoogleRating) return null;
         return (
           <Reviews
             heading={lang === "bn" ? displayConfig.reviewsHeading.bn : displayConfig.reviewsHeading.en}
@@ -1157,8 +1359,10 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
             googleReviewUrl={displayConfig.googleReviewUrl}
           />
         );
+      }
       case "video":
-        return <Video heading="Video" description="Craft video" videoUrl={displayConfig.youtubeUrl} />;
+        if (!displayConfig.youtubeUrl) return null;
+        return <Video heading="Video" description="Product video" videoUrl={displayConfig.youtubeUrl} />;
       case "order":
         return (
           <section id="order" className="section py-20">
@@ -1321,7 +1525,8 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                   </button>
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
                     <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input type="checkbox" checked={giftWrap} onChange={(e) => setGiftWrap(e.target.checked)} /> Gift wrap
+                      <input type="checkbox" checked={giftWrap} onChange={(e) => setGiftWrap(e.target.checked)} />{" "}
+                      {t.giftWrapLabel}
                     </label>
                     <label className="mt-2 flex items-center gap-2 text-sm text-slate-600">
                       <input type="checkbox" checked={cod} onChange={(e) => setCod(e.target.checked)} /> {t.codLabel}
@@ -1343,18 +1548,20 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                         </select>
                       </div>
                     )}
-                    <div className="mt-4 text-sm font-semibold">{t.paymentStripe}</div>
-                    <div className="text-xs text-slate-500">{t.paymentManual}</div>
-                    <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="stripe"
-                        checked={paymentMethod === "stripe"}
-                        onChange={() => setPaymentMethod("stripe")}
-                      />
-                      Stripe
-                    </label>
+                    {stripeEnabled ? <div className="mt-4 text-sm font-semibold">{t.paymentStripe}</div> : null}
+                    <div className={`text-xs text-slate-500 ${stripeEnabled ? "" : "mt-4"}`}>{t.paymentManual}</div>
+                    {stripeEnabled ? (
+                      <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="stripe"
+                          checked={paymentMethod === "stripe"}
+                          onChange={() => setPaymentMethod("stripe")}
+                        />
+                        Stripe
+                      </label>
+                    ) : null}
                     {displayConfig.paymentProviders?.bkash && (
                       <label className="flex items-center gap-2 text-xs text-slate-500">
                         <input
@@ -1440,7 +1647,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                         }
                       }}
                     />
-                    Allow analytics & marketing cookies
+                    {t.consentLabel}
                   </label>
                 </form>
               </div>
@@ -1471,7 +1678,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                             <button type="button" onClick={() => updateCartQty(item.id, item.quantity + 1)} className="rounded-full border border-slate-200 px-2">+</button>
                           </div>
                         </div>
-                        <div className="text-xs">BDT {(item.unitPrice * item.quantity).toLocaleString("en-BD")}</div>
+                        <div className="text-xs">৳{(item.unitPrice * item.quantity).toLocaleString("en-BD")}</div>
                       </div>
                     ))
                   ) : (
@@ -1481,16 +1688,16 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
                         {Object.values(currentItem.optionValues).filter(Boolean).join(" • ")}
                       </div>
                       <div className="text-xs">{t.cartQty}: {currentItem.quantity}</div>
-                      <div className="text-xs">BDT {(currentItem.unitPrice * currentItem.quantity).toLocaleString("en-BD")}</div>
+                      <div className="text-xs">৳{(currentItem.unitPrice * currentItem.quantity).toLocaleString("en-BD")}</div>
                     </div>
                   )}
                 </div>
                 <div className="mt-4 space-y-2 text-sm text-slate-600">
-                  <div className="flex items-center justify-between"><span>{t.summarySubtotal}</span><span>BDT {effectiveSubtotal.toLocaleString("en-BD")}</span></div>
-                  <div className="flex items-center justify-between"><span>{t.summaryGiftWrap}</span><span>BDT {giftWrapFee.toLocaleString("en-BD")}</span></div>
-                  <div className="flex items-center justify-between"><span>{t.summaryShipping}</span><span>BDT {shippingFee.toLocaleString("en-BD")}</span></div>
-                  <div className="flex items-center justify-between"><span>{t.summaryDiscount}</span><span>-BDT {discount.toLocaleString("en-BD")}</span></div>
-                  <div className="flex items-center justify-between text-slate-900 font-semibold text-base"><span>{t.summaryTotal}</span><span>BDT {total.toLocaleString("en-BD")}</span></div>
+                  <div className="flex items-center justify-between"><span>{t.summarySubtotal}</span><span>৳{effectiveSubtotal.toLocaleString("en-BD")}</span></div>
+                  <div className="flex items-center justify-between"><span>{t.summaryGiftWrap}</span><span>৳{giftWrapFee.toLocaleString("en-BD")}</span></div>
+                  <div className="flex items-center justify-between"><span>{t.summaryShipping}</span><span>৳{shippingFee.toLocaleString("en-BD")}</span></div>
+                  <div className="flex items-center justify-between"><span>{t.summaryDiscount}</span><span>-৳{discount.toLocaleString("en-BD")}</span></div>
+                  <div className="flex items-center justify-between text-slate-900 font-semibold text-base"><span>{t.summaryTotal}</span><span>৳{total.toLocaleString("en-BD")}</span></div>
                 </div>
               </div>
             </div>
@@ -1501,7 +1708,7 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
         return (
           <section className="section pb-20">
             <div className="card p-8">
-              <h2 className="text-2xl font-semibold text-slate-900">FAQ</h2>
+              <h2 className="text-2xl font-semibold text-slate-900">{t.faqHeading}</h2>
               <div className="mt-6 grid gap-4 md:grid-cols-3">
                 {items.map((item: any, index: number) => (
                   <div key={`${item.q}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1515,13 +1722,27 @@ export default function Home({ config, consent, setConsent }: Props & { consent?
         );
       }
       case "sticky_buy": {
-        const text = sections.find((s) => s.type === "sticky_buy")?.settings?.text || "Order now";
+        const text = sections.find((s) => s.type === "sticky_buy")?.settings?.text || t.priceDeliveryNote;
+        // Most visitors arrive on a phone, so the price and the order button stay
+        // within thumb reach at all times. `env(safe-area-inset-bottom)` keeps it
+        // clear of the iOS home indicator.
         return (
-          <div className="fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-5xl">
-            <div className="rounded-2xl bg-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xl">
-              <div className="text-sm font-semibold">{text}</div>
-              <a href="#order" className="rounded-full bg-white px-4 py-2 text-slate-900 text-sm font-semibold">
-                Order now
+          <div
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--color-hairline)] bg-white/90 backdrop-blur-xl"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <div className="section flex items-center justify-between gap-4 py-3">
+              <div className="min-w-0">
+                <div className="text-lg font-semibold leading-tight tracking-tight text-[color:var(--color-ink)]">
+                  ৳{unitPrice.toLocaleString("en-BD")}
+                </div>
+                <div className="truncate text-xs text-[color:var(--color-ink-muted)]">{text}</div>
+              </div>
+              <a
+                href="#order"
+                className="pressable shrink-0 rounded-full bg-[color:var(--color-ink)] px-6 py-3 text-sm font-semibold text-white"
+              >
+                {t.stickyOrder}
               </a>
             </div>
           </div>
@@ -1554,6 +1775,12 @@ return (
       logoUrl={displayConfig.logoUrl}
       footerText={displayConfig.footerText}
     >
+      <Head>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
+        {faqJsonLd ? (
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+        ) : null}
+      </Head>
       {sections.filter((s) => s.enabled).map((section) => (
         <div key={section.id}>{renderSection(section.type)}</div>
       ))}
@@ -1584,5 +1811,8 @@ export const getServerSideProps: GetServerSideProps = async ({ res }) => {
     res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
   }
   const config = await getConfig();
-  return { props: { config } };
+  // Stripe does not operate in Bangladesh, so the card option must not be
+  // offered unless the store has actually configured it — otherwise the primary
+  // checkout path dead-ends for every visitor.
+  return { props: { config, stripeEnabled: Boolean(process.env.STRIPE_SECRET_KEY) } };
 };

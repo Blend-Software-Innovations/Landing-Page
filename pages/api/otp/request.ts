@@ -1,7 +1,7 @@
 import { logger } from "../../../lib/logger";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { applyCors } from "../../../lib/cors";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { publicRateLimitPerMin, otpLength, otpTtlMin, otpResendCooldownSec } from "../../../lib/env";
 import { requestOtp, setOtpCooldown } from "../../../lib/otp";
 import twilio from "twilio";
@@ -25,9 +25,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-  if (await isRateLimited(`otp-request:${ip}`, publicRateLimitPerMin, 60_000)) {
+  // OTP sends cost real money (Twilio) — much tighter limits than other public
+  // endpoints, plus a global daily budget as a hard brake on SMS-pumping fraud.
+  const ip = getClientIp(req);
+  if (await isRateLimited(`otp-request:${ip}`, 5, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
+  }
+  if (await isRateLimited(`otp-request-hour:${ip}`, 20, 60 * 60_000)) {
+    return res.status(429).json({ error: "Too many requests" });
+  }
+  const dailyBudget = Number(process.env.OTP_DAILY_MAX || "500");
+  if (await isRateLimited("otp-global-day", dailyBudget, 24 * 60 * 60_000)) {
+    return res.status(429).json({ error: "OTP service is temporarily unavailable" });
   }
 
   const { phone } = req.body as { phone?: string };

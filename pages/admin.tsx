@@ -72,6 +72,62 @@ function TextAreaField({ label, value, onChange, placeholder }: { label: string;
     </label>
   );
 }
+
+type FaqItem = { q: string; a: string };
+
+function isFaqItemArray(value: unknown): value is FaqItem[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        item !== null &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        typeof (item as FaqItem).q === "string" &&
+        typeof (item as FaqItem).a === "string"
+    )
+  );
+}
+
+function FaqItemsEditor({ items, onValidChange }: { items: FaqItem[]; onValidChange: (items: FaqItem[]) => void }) {
+  const [text, setText] = useState(() => JSON.stringify(items || [], null, 2));
+  const [invalid, setInvalid] = useState(false);
+  const lastAccepted = useRef(JSON.stringify(items || []));
+
+  useEffect(() => {
+    const incoming = JSON.stringify(items || []);
+    if (incoming !== lastAccepted.current) {
+      lastAccepted.current = incoming;
+      setText(JSON.stringify(items || [], null, 2));
+      setInvalid(false);
+    }
+  }, [items]);
+
+  const handleChange = (v: string) => {
+    setText(v);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(v);
+    } catch {
+      setInvalid(true);
+      return;
+    }
+    if (!isFaqItemArray(parsed)) {
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    lastAccepted.current = JSON.stringify(parsed);
+    onValidChange(parsed);
+  };
+
+  return (
+    <div className="space-y-1">
+      <TextAreaField label="FAQ items (JSON array)" value={text} onChange={handleChange} placeholder='[{"q": "Question", "a": "Answer"}]' />
+      {invalid && <div className="text-xs font-semibold text-rose-600">Invalid JSON — not saved</div>}
+    </div>
+  );
+}
 export default function AdminDashboard() {
   const router = useRouter();
   const [config, setConfig] = useState<SiteConfig | null>(null);
@@ -560,17 +616,9 @@ export default function AdminDashboard() {
                   />
                 )}
                 {section.type === "faq" && (
-                  <TextAreaField
-                    label="FAQ items (JSON array)"
-                    value={JSON.stringify(section.settings?.items || [], null, 2)}
-                    onChange={(v) => {
-                      let items: any[] = [];
-                      try {
-                        const parsed = JSON.parse(v);
-                        if (Array.isArray(parsed)) items = parsed;
-                      } catch {
-                        items = [];
-                      }
+                  <FaqItemsEditor
+                    items={(section.settings?.items as FaqItem[]) || []}
+                    onValidChange={(items) => {
                       const next = normalizeSections(config.sections).map((s) =>
                         s.id === section.id ? { ...s, settings: { ...(s.settings || {}), items } } : s
                       );
@@ -607,6 +655,16 @@ export default function AdminDashboard() {
             <TextAreaField label="Hero title (BN)" value={config.heroTitle.bn} onChange={(v) => updateConfig({ ...config, heroTitle: { ...config.heroTitle, bn: v } })} />
             <TextAreaField label="Hero body (EN)" value={config.heroBody.en} onChange={(v) => updateConfig({ ...config, heroBody: { ...config.heroBody, en: v } })} />
             <TextAreaField label="Hero body (BN)" value={config.heroBody.bn} onChange={(v) => updateConfig({ ...config, heroBody: { ...config.heroBody, bn: v } })} />
+            <InputField label="Hero primary button (EN)" value={config.heroCtaPrimary.en} onChange={(v) => updateConfig({ ...config, heroCtaPrimary: { ...config.heroCtaPrimary, en: v } })} />
+            <InputField label="Hero primary button (BN)" value={config.heroCtaPrimary.bn} onChange={(v) => updateConfig({ ...config, heroCtaPrimary: { ...config.heroCtaPrimary, bn: v } })} />
+            <InputField label="Hero secondary button (EN)" value={config.heroCtaSecondary.en} onChange={(v) => updateConfig({ ...config, heroCtaSecondary: { ...config.heroCtaSecondary, en: v } })} />
+            <InputField label="Hero secondary button (BN)" value={config.heroCtaSecondary.bn} onChange={(v) => updateConfig({ ...config, heroCtaSecondary: { ...config.heroCtaSecondary, bn: v } })} />
+            <InputField label="Final CTA title (EN)" value={config.finalCtaTitle.en} onChange={(v) => updateConfig({ ...config, finalCtaTitle: { ...config.finalCtaTitle, en: v } })} />
+            <InputField label="Final CTA title (BN)" value={config.finalCtaTitle.bn} onChange={(v) => updateConfig({ ...config, finalCtaTitle: { ...config.finalCtaTitle, bn: v } })} />
+            <TextAreaField label="Final CTA body (EN)" value={config.finalCtaBody.en} onChange={(v) => updateConfig({ ...config, finalCtaBody: { ...config.finalCtaBody, en: v } })} />
+            <TextAreaField label="Final CTA body (BN)" value={config.finalCtaBody.bn} onChange={(v) => updateConfig({ ...config, finalCtaBody: { ...config.finalCtaBody, bn: v } })} />
+            <InputField label="Final CTA button (EN)" value={config.finalCtaButton.en} onChange={(v) => updateConfig({ ...config, finalCtaButton: { ...config.finalCtaButton, en: v } })} />
+            <InputField label="Final CTA button (BN)" value={config.finalCtaButton.bn} onChange={(v) => updateConfig({ ...config, finalCtaButton: { ...config.finalCtaButton, bn: v } })} />
             <div className="space-y-2">
               <InputField label="Signature image" value={config.signatureImage} onChange={(v) => updateConfig({ ...config, signatureImage: v })} />
               <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 cursor-pointer">
@@ -1316,7 +1374,7 @@ export default function AdminDashboard() {
               type="button"
               className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
               onClick={() => {
-                const next = [...products, {
+                const newProduct = {
                   id: `product-${Date.now()}`,
                   name: "New product",
                   subtitle: "",
@@ -1326,8 +1384,9 @@ export default function AdminDashboard() {
                   stock: 0,
                   outOfStock: false,
                   badge: ""
-                }];
-                updateConfig({ ...config, products: next, activeProductId: next[0].id });
+                };
+                const next = [...products, newProduct];
+                updateConfig({ ...config, products: next, activeProductId: newProduct.id });
               }}
             >
               Add product
@@ -2152,8 +2211,23 @@ export default function AdminDashboard() {
                     type="button"
                     className="mt-3 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
                     onClick={async () => {
-                      await fetch(`/api/admin/rollback?id=${entry.id}`, { headers: getAuthHeaders() });
-                      loadConfig();
+                      try {
+                        const response = await fetch("/api/admin/rollback", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                          body: JSON.stringify({ id: entry.id })
+                        });
+                        if (response.ok) {
+                          setStatus("Rolled back to selected version");
+                          await loadConfig();
+                          await loadAudit();
+                        } else {
+                          const data = (await response.json().catch(() => ({}))) as { error?: string };
+                          setStatus(data.error || "Rollback failed");
+                        }
+                      } catch {
+                        setStatus("Rollback failed");
+                      }
                     }}
                   >
                     Rollback to this version

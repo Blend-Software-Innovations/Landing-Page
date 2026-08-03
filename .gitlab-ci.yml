@@ -7,7 +7,6 @@ stages:
 variables:
   NODE_ENV: "test"
   NEXT_TELEMETRY_DISABLED: "1"
-  DATABASE_URL: "postgresql://user:pass@localhost:5432/pen_landing"
 
 cache:
   key: ${CI_COMMIT_REF_SLUG}
@@ -16,33 +15,46 @@ cache:
 
 install:
   stage: install
-  image: node:20
+  image: node:22
   script:
-    - npm ci
+    # The repo intentionally ships no lockfile (App Platform buildpack installs
+    # fresh), so npm install rather than npm ci.
+    - npm install
   artifacts:
     paths:
       - node_modules/
 
 lint:
   stage: lint
-  image: node:20
+  image: node:22
   script:
     - npm run lint
 
 prisma-validate:
   stage: lint
-  image: node:20
+  image: node:22
   script:
     - npx prisma validate
 
 test:
   stage: test
-  image: node:20
+  image: node:22
+  services:
+    - name: postgres:15
+      alias: postgres
+  variables:
+    POSTGRES_USER: ci
+    POSTGRES_PASSWORD: ci
+    POSTGRES_DB: pen_landing
+    DATABASE_URL: "postgresql://ci:ci@postgres:5432/pen_landing"
+    AUTH_JWT_SECRET: "ci-only-jwt-secret-not-production"
+    AUTH_REFRESH_SECRET: "ci-only-refresh-secret-not-prod"
   script:
+    - npx prisma migrate deploy
     - npm run test
 
 build:
   stage: build
-  image: node:20
+  image: node:22
   script:
     - npm run build

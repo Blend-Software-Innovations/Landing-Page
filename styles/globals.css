@@ -1,17 +1,59 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
+
+/* Tailwind v4 is CSS-first: tokens must live in @theme, not tailwind.config.js
+   (that file is only read when a @config directive points at it). Everything the
+   markup relies on is declared here so the utilities actually generate. */
+@theme {
+  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Neutral ink scale — near-black rather than pure black, Apple-style */
+  --color-ink: #0b0b0f;
+  --color-ink-soft: #3f4451;
+  --color-ink-muted: #6b7280;
+  --color-surface: #ffffff;
+  --color-canvas: #f5f5f7;
+  --color-hairline: #e6e6eb;
+  --color-accent: #0b0b0f;
+  --color-trust: #0a7d43;
+
+  --shadow-soft: 0 20px 60px -40px rgba(11, 11, 15, 0.45);
+  --shadow-glow: 0 25px 60px -35px rgba(11, 11, 15, 0.55);
+  --shadow-lift: 0 40px 80px -50px rgba(11, 11, 15, 0.55);
+
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+}
 
 :root {
   color-scheme: light;
+  /* Set by the tilt/parallax handlers in JS; safe defaults keep layout static. */
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --parallax: 0px;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  background-color: #f5f5f7;
-  color: #0f172a;
+  font-family: var(--font-body);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Bangla renders with different metrics than Latin; a slightly looser leading
+   keeps mixed bn/en paragraphs from feeling cramped. */
+:lang(bn),
+[lang="bn"] {
+  line-height: 1.75;
 }
 
 .page-shell {
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.9), transparent 55%), #f5f5f7;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.9), transparent 55%), var(--color-canvas);
 }
 
 .section {
@@ -20,22 +62,102 @@ body {
 }
 
 .card {
-  background: #ffffff;
+  background: var(--color-surface);
   border-radius: 24px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 24px 80px -60px rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--color-hairline);
+  box-shadow: var(--shadow-soft);
 }
 
 .text-ink {
-  color: #0f172a;
+  color: var(--color-ink);
 }
 
 .shadow-soft {
-  box-shadow: 0 20px 60px -40px rgba(15, 23, 42, 0.45);
+  box-shadow: var(--shadow-soft);
 }
 
 .shadow-glow {
-  box-shadow: 0 25px 60px -35px rgba(15, 23, 42, 0.6);
+  box-shadow: var(--shadow-glow);
+}
+
+/* ---------------------------------------------------------------------------
+   Motion system
+   Depth is done with CSS 3D transforms rather than WebGL on purpose: the
+   audience is largely on mid-range Android over mobile data, where a 3D
+   library's payload costs more conversions than the effect wins. Transforms
+   composite on the GPU and ship zero extra bytes.
+   --------------------------------------------------------------------------- */
+
+/* Scroll reveal — starts hidden only when JS is present to reveal it, so a
+   no-JS or failed-hydration render still shows all content. */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s var(--ease-out-soft),
+    transform 0.7s var(--ease-out-soft);
+  will-change: opacity, transform;
+}
+
+.js .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal-delay-1 { transition-delay: 80ms; }
+.reveal-delay-2 { transition-delay: 160ms; }
+.reveal-delay-3 { transition-delay: 240ms; }
+
+/* Tilt card — perspective lives on the wrapper so the child keeps crisp text. */
+.tilt-scene {
+  perspective: 1200px;
+}
+
+.tilt-card {
+  transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transform-style: preserve-3d;
+  transition: transform 0.5s var(--ease-spring), box-shadow 0.5s var(--ease-spring);
+  will-change: transform;
+}
+
+.tilt-card:hover {
+  box-shadow: var(--shadow-lift);
+}
+
+.tilt-layer {
+  transform: translateZ(40px);
+}
+
+.tilt-layer-deep {
+  transform: translateZ(70px);
+}
+
+/* Pressable — the tactile confirmation Apple uses on every control. */
+.pressable {
+  transition: transform 0.18s var(--ease-spring), box-shadow 0.18s var(--ease-spring);
+}
+
+.pressable:active {
+  transform: scale(0.97);
+}
+
+.lift-on-hover {
+  transition: transform 0.35s var(--ease-spring), box-shadow 0.35s var(--ease-spring);
+}
+
+.lift-on-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lift);
+}
+
+/* Marquee for the trust strip */
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  animation: marquee-scroll 32s linear infinite;
 }
 
 @keyframes order-shake {
@@ -48,4 +170,40 @@ body {
 
 .animate-order-shake {
   animation: order-shake 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2.4s linear infinite;
+}
+
+/* Respect the OS-level reduced-motion preference: strip animation, keep the
+   end state visible. Non-negotiable for accessibility. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .js .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  .tilt-card {
+    transform: none;
+  }
 }

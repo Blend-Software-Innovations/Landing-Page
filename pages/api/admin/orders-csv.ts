@@ -2,18 +2,22 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { hasPermission, resolveRole } from "../../../lib/adminAuth";
 import { listOrders } from "../../../lib/orders";
 import { adminRateLimitPerMin } from "../../../lib/env";
-import { isRateLimited } from "../../../lib/rateLimit";
+import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { requireDb } from "../../../lib/db";
 
 function csvEscape(value: string) {
-  const safe = value.replace(/"/g, '""');
+  // Neutralize spreadsheet formula injection: a leading =, +, -, @, tab or CR makes
+  // Excel/Sheets evaluate the cell (customerName/address arrive from unauthenticated
+  // endpoints). Prefixing a single quote forces the cell to be treated as text.
+  const guarded = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  const safe = guarded.replace(/"/g, '""');
   return `"${safe}"`;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const role = await resolveRole(req);
   if (!hasPermission(role, "orders:read")) return res.status(401).json({ error: "Unauthorized" });
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   if (await isRateLimited(`admin-orders-csv:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
   }
