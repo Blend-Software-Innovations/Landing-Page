@@ -454,10 +454,13 @@ export default function Home({
   const [abVariant, setAbVariant] = useState<ExperimentVariant | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [giftWrap, setGiftWrap] = useState(false);
-  const [cod, setCod] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual" | "bkash" | "nagad" | "rocket">(
-    stripeEnabled ? "stripe" : "manual"
-  );
+  // Cash on delivery is the default: it is how most Bangladeshi buyers pay, and
+  // it is what the hero, trust row and FAQ all promise.
+  const [cod, setCod] = useState(true);
+  // Never default to Stripe. It cannot process Bangladeshi cards, so pre-selecting
+  // it pointed every visitor at a checkout that fails. It stays available for
+  // international cards when a key is configured, but must be chosen explicitly.
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual" | "bkash" | "nagad" | "rocket">("manual");
   const [otpId, setOtpId] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpToken, setOtpToken] = useState("");
