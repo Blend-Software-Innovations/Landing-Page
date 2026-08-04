@@ -1,6 +1,7 @@
 import type { SiteConfig } from "./siteConfig";
 import { getPrisma } from "./prisma";
 import { isDbAvailable } from "./db";
+import { resolveDeliveryZone, isValidLocation } from "./bdGeo";
 
 // Server-side pricing. Client-submitted unitPrice/total/fees are display-only;
 // every order-creating endpoint must price items from config + DB via this
@@ -137,10 +138,27 @@ export async function priceItems(
 
 // Mirrors the storefront math in pages/index.tsx so the quoted total and the
 // charged total agree; the server result is authoritative.
+// Resolve the billing zone from the district/thana pair rather than trusting a
+// client-supplied deliveryZone — otherwise any caller could post
+// deliveryZone:"insideDhaka" with a Rangpur address and pay the cheaper rate.
+// Falls back to the submitted zone only for legacy payloads with no district.
+export function resolveZone(opts: { district?: string; thana?: string; deliveryZone?: string }): "insideDhaka" | "outsideDhaka" {
+  if (opts.district) {
+    // A district was supplied, so the address is authoritative. If the pair does
+    // not check out (e.g. district "Rangpur" with thana "Dhanmondi"), fall back
+    // to the more expensive zone rather than the client's claim — otherwise a
+    // deliberately mismatched pair would buy the cheaper Dhaka rate.
+    if (!isValidLocation(opts.district, String(opts.thana || ""))) return "outsideDhaka";
+    return resolveDeliveryZone(opts.district, String(opts.thana || ""));
+  }
+  // Legacy payloads with no district at all keep the previous behaviour.
+  return opts.deliveryZone === "insideDhaka" ? "insideDhaka" : "outsideDhaka";
+}
+
 export function computeOrderAmounts(
   config: SiteConfig,
   items: PricedItem[],
-  opts: { deliveryArea?: string; deliveryZone?: string; giftWrap?: boolean }
+  opts: { deliveryArea?: string; deliveryZone?: string; district?: string; thana?: string; giftWrap?: boolean }
 ): OrderAmounts {
   const goodsSubtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -154,7 +172,7 @@ export function computeOrderAmounts(
     rawShippingFee = areaCfg.fee;
   } else {
     const rules = config.shippingRules;
-    const insideDhaka = opts.deliveryZone === "insideDhaka";
+    const insideDhaka = resolveZone(opts) === "insideDhaka";
     if (rules?.enabled && rules.tiers?.length) {
       const sorted = [...rules.tiers].sort((a, b) => a.maxWeight - b.maxWeight);
       const tier = sorted.find((t) => totalWeight <= t.maxWeight) || sorted[sorted.length - 1];

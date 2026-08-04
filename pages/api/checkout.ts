@@ -77,6 +77,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const amounts = computeOrderAmounts(config, items, {
       deliveryArea,
       deliveryZone,
+      district: String(body.district || ""),
+      thana: String(body.thana || ""),
       giftWrap: Boolean(body.giftWrap)
     });
 
