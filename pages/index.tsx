@@ -11,6 +11,7 @@ import TrustBar from "../components/TrustBar";
 import { useJsFlag, useScrollReveal, useTilt } from "../lib/useMotion";
 import { SiteConfig, Experiment, ExperimentVariant, Review, normalizeSections } from "../lib/siteConfig";
 import { materializeVariants } from "../lib/variants";
+import { DISTRICTS, getThanas, resolveDeliveryZone, districtLabel, thanaLabel } from "../lib/bdGeo";
 import { getConfig } from "../lib/siteConfig.server";
 
 type Lang = "en" | "bn";
@@ -60,6 +61,11 @@ type UiCopy = {
   proofLabel: string;
   paidAmountLabel: string;
   deliveryInside: string;
+  selectDistrict: string;
+  selectThana: string;
+  selectDistrictFirst: string;
+  selectAddressForFee: string;
+  locationRequired: string;
   deliveryOutside: string;
   selectProduct: string;
   productHint: string;
@@ -152,6 +158,11 @@ const ui: Record<Lang, UiCopy> = {
     proofLabel: "Payment screenshot",
     paidAmountLabel: "Paid amount (BDT)",
     deliveryInside: "Inside Dhaka",
+    selectDistrict: "Select district",
+    selectThana: "Select thana / upazila",
+    selectDistrictFirst: "Select a district first",
+    selectAddressForFee: "Choose your area to see the delivery charge",
+    locationRequired: "Please select your district and thana.",
     deliveryOutside: "Outside Dhaka",
     selectProduct: "Select product",
     productHint: "Choose the product you want",
@@ -242,6 +253,11 @@ const ui: Record<Lang, UiCopy> = {
     proofLabel: "পেমেন্ট স্ক্রিনশট",
     paidAmountLabel: "পরিশোধিত টাকার পরিমাণ (BDT)",
     deliveryInside: "ঢাকার ভিতরে",
+    selectDistrict: "জেলা নির্বাচন করুন",
+    selectThana: "থানা / উপজেলা নির্বাচন করুন",
+    selectDistrictFirst: "আগে জেলা নির্বাচন করুন",
+    selectAddressForFee: "এলাকা বাছলে ডেলিভারি চার্জ দেখা যাবে",
+    locationRequired: "আপনার জেলা ও থানা নির্বাচন করুন।",
     deliveryOutside: "ঢাকার বাইরে",
     selectProduct: "পণ্য নির্বাচন",
     productHint: "পছন্দের পণ্যটি বেছে নিন",
@@ -469,8 +485,16 @@ export default function Home({
   const [phoneInput, setPhoneInput] = useState("");
   const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
   const [otpCooldownRemaining, setOtpCooldownRemaining] = useState(0);
-  const [deliveryZone, setDeliveryZone] = useState<"insideDhaka" | "outsideDhaka">("insideDhaka");
-  const [deliveryArea, setDeliveryArea] = useState("");
+  // District -> thana cascade. The zone (and therefore the shipping fee) is
+  // DERIVED from the district rather than picked by the buyer, so the quote
+  // cannot disagree with the address. The server re-derives it identically.
+  const [district, setDistrict] = useState("");
+  const [thana, setThana] = useState("");
+  const thanaOptions = useMemo(() => getThanas(district), [district]);
+  const deliveryZone = resolveDeliveryZone(district, thana);
+  // The thana doubles as the delivery area so a configured per-area fee still
+  // wins over the flat inside/outside rate.
+  const deliveryArea = thana;
   const [deliverySlot, setDeliverySlot] = useState("");
   const [courierPartner, setCourierPartner] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
@@ -790,6 +814,8 @@ export default function Home({
       address: String(formData.get("address") || "").trim(),
       city: String(formData.get("city") || "").trim(),
       area: String(formData.get("area") || "").trim(),
+      district,
+      thana,
       deliveryArea,
       deliverySlot,
         note: String(formData.get("note") || "").trim(),
@@ -844,6 +870,11 @@ export default function Home({
     }
     if (!payload.address || !payload.city) {
       setError(t.addressFieldsError);
+      setLoading(false);
+      return;
+    }
+    if (!district || !thana) {
+      setError(t.locationRequired);
       setLoading(false);
       return;
     }
@@ -1449,30 +1480,43 @@ export default function Home({
                       className="rounded-xl border border-slate-200 px-4 py-3"
                     />
                     <select
-                      value={deliveryZone}
-                      onChange={(e) => setDeliveryZone(e.target.value as "insideDhaka" | "outsideDhaka")}
+                      value={district}
+                      onChange={(e) => {
+                        setDistrict(e.target.value);
+                        setThana("");
+                      }}
                       className="rounded-xl border border-slate-200 px-4 py-3"
                     >
-                      <option value="insideDhaka">{t.deliveryInside}</option>
-                      <option value="outsideDhaka">{t.deliveryOutside}</option>
+                      <option value="">{t.selectDistrict}</option>
+                      {DISTRICTS.map((d) => (
+                        <option key={d.en} value={d.en}>
+                          {districtLabel(d, lang)}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  {(displayConfig.deliveryAreas?.length || displayConfig.deliverySlots?.length) ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <select
+                      value={thana}
+                      onChange={(e) => setThana(e.target.value)}
+                      disabled={!district}
+                      className="rounded-xl border border-slate-200 px-4 py-3 disabled:bg-slate-50 disabled:text-slate-400"
+                    >
+                      <option value="">{district ? t.selectThana : t.selectDistrictFirst}</option>
+                      {thanaOptions.map((th) => (
+                        <option key={th.en} value={th.en}>
+                          {thanaLabel(th, lang)}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      {thana
+                        ? `${deliveryZone === "insideDhaka" ? t.deliveryInside : t.deliveryOutside} — ৳${shippingFee}`
+                        : t.selectAddressForFee}
+                    </div>
+                  </div>
+                  {displayConfig.deliverySlots?.length ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                      {displayConfig.deliveryAreas?.length ? (
-                        <select
-                          value={deliveryArea}
-                          onChange={(e) => setDeliveryArea(e.target.value)}
-                          className="rounded-xl border border-slate-200 px-4 py-3"
-                        >
-                          <option value="">{lang === "bn" ? "ডেলিভারি এলাকা বাছুন" : "Select delivery area"}</option>
-                          {displayConfig.deliveryAreas.map((a) => (
-                            <option key={a.name} value={a.name}>
-                              {a.name} (৳{a.fee}{a.minOrder ? `, min ৳${a.minOrder}` : ""})
-                            </option>
-                          ))}
-                        </select>
-                      ) : null}
                       {displayConfig.deliverySlots?.length ? (
                         <select
                           value={deliverySlot}

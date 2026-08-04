@@ -90,6 +90,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const amounts = computeOrderAmounts(config, items, {
         deliveryArea: String(payload.deliveryArea || ""),
         deliveryZone: String(payload.deliveryZone || ""),
+        district: String(payload.district || ""),
+        thana: String(payload.thana || ""),
         giftWrap: Boolean(payload.giftWrap)
       });
       const total = amounts.total;
