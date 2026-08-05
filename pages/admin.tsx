@@ -1443,6 +1443,18 @@ export default function AdminDashboard() {
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
                   placeholder="Caption"
                 />
+                {/* Images sharing a colour group behind one swatch on the
+                    storefront. Leave blank to show the image for every colour. */}
+                <input
+                  value={item.color || ""}
+                  onChange={(e) => {
+                    const next = [...gallery];
+                    next[index] = { ...item, color: e.target.value };
+                    updateConfig({ ...config, gallery: next });
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                  placeholder="Colour (optional) — e.g. White / সাদা"
+                />
                 <div className="flex items-center gap-2">
                   <button
                     type="button"

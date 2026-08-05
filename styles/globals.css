@@ -207,3 +207,156 @@ body {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Product gallery — multi-angle + colour swatches.
+   Mobile first: most Bangladeshi traffic is mid-range Android on mobile data,
+   so depth comes from CSS 3D transforms rather than a WebGL bundle, and the
+   tilt is pointer-only (a thumb gets swipe instead).
+--------------------------------------------------------------------------- */
+.gallery3d {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.gallery3d-stage {
+  position: relative;
+  border-radius: 1.25rem;
+  background: linear-gradient(160deg, #f8fafc 0%, #eef2f7 100%);
+  padding: 0.75rem;
+  overflow: hidden;
+}
+
+.gallery3d-figure {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+  transform-style: preserve-3d;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.gallery3d-img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border-radius: 1rem;
+  /* Grounds the product so it reads as an object in space, not a flat cutout. */
+  filter: drop-shadow(0 18px 24px rgba(15, 23, 42, 0.18));
+}
+
+/* Sweeping highlight that tracks the tilt — the cue that sells "premium". */
+.gallery3d-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.55) 50%, transparent 58%);
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.gallery3d-stage:hover .gallery3d-sheen {
+  opacity: 1;
+}
+
+.gallery3d-counter {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7);
+  color: #fff;
+}
+
+.gallery3d-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.gallery3d-chip {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  min-height: 40px;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.gallery3d-chip.is-active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+}
+
+/* Horizontal scroller with snap: the expected gesture on a phone. */
+.gallery3d-thumbs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
+}
+
+.gallery3d-thumb {
+  flex: 0 0 auto;
+  width: 68px;
+  height: 68px;
+  padding: 0;
+  border-radius: 0.75rem;
+  border: 2px solid transparent;
+  background: #f1f5f9;
+  overflow: hidden;
+  scroll-snap-align: start;
+  transition: border-color 150ms ease, transform 150ms ease;
+}
+
+.gallery3d-thumb.is-active {
+  border-color: #0f172a;
+  transform: translateY(-2px);
+}
+
+.gallery3d-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gallery3d-caption {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .gallery3d-thumb {
+    width: 76px;
+    height: 76px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery3d-figure {
+    transform: none !important;
+    transition: none;
+  }
+
+  .gallery3d-sheen {
+    display: none;
+  }
+
+  .gallery3d-thumbs {
+    scroll-behavior: auto;
+  }
+}
