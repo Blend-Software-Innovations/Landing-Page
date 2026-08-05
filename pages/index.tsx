@@ -11,6 +11,12 @@ import TrustBar from "../components/TrustBar";
 import { useJsFlag, useScrollReveal, useTilt } from "../lib/useMotion";
 import { SiteConfig, Experiment, ExperimentVariant, Review, normalizeSections } from "../lib/siteConfig";
 import { materializeVariants } from "../lib/variants";
+
+function newCheckoutKey() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `ck-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 import { DISTRICTS, getThanas, resolveDeliveryZone, districtLabel, thanaLabel } from "../lib/bdGeo";
 import {
   normalizeQuantity,
@@ -19,6 +25,7 @@ import {
   cartSubtotal as cartSubtotalOf,
   cartQuantity as cartQuantityOf
 } from "../lib/cart";
+import { unitPriceFromConfig, orderDiscount } from "../lib/priceFromConfig";
 import { getConfig } from "../lib/siteConfig.server";
 
 type Lang = "en" | "bn";
@@ -324,13 +331,41 @@ type CartItem = {
   weightPerUnit: number;
 };
 
+// A persisted cart is untrusted input: it may come from an older build, a hand
+// edited localStorage value, or a session from before a price change. Coerce
+// every field and drop anything malformed — an unvalidated `unitPrice: "abc"`
+// used to render the whole summary as ৳NaN, and `quantity: 250` displayed 2.5x
+// what the server would actually charge (it clamps at 100).
+function sanitizeCartItem(raw: unknown): CartItem | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const id = String(item.id || "");
+  const unitPrice = Number(item.unitPrice);
+  if (!id || !Number.isFinite(unitPrice) || unitPrice < 0) return null;
+  const weight = Number(item.weightPerUnit);
+  return {
+    id,
+    name: String(item.name || ""),
+    productId: String(item.productId || ""),
+    variantId: String(item.variantId || ""),
+    optionValues:
+      item.optionValues && typeof item.optionValues === "object" && !Array.isArray(item.optionValues)
+        ? (item.optionValues as Record<string, string>)
+        : {},
+    quantity: normalizeQuantity(item.quantity),
+    unitPrice: Math.round(unitPrice),
+    weightPerUnit: Number.isFinite(weight) && weight >= 0 ? weight : 0
+  };
+}
+
 function loadCart(): CartItem[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(CART_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(sanitizeCartItem).filter((item): item is CartItem => item !== null);
   } catch {
     return [];
   }
@@ -495,6 +530,13 @@ export default function Home({
   // District -> thana cascade. The zone (and therefore the shipping fee) is
   // DERIVED from the district rather than picked by the buyer, so the quote
   // cannot disagree with the address. The server re-derives it identically.
+  // One key per attempt: regenerated after a successful order so the next order
+  // is not swallowed by the idempotent-replay guard.
+  const [checkoutKey, setCheckoutKey] = useState("");
+  useEffect(() => {
+    if (!checkoutKey) setCheckoutKey(newCheckoutKey());
+  }, [checkoutKey]);
+
   const [district, setDistrict] = useState("");
   const [thana, setThana] = useState("");
   const thanaOptions = useMemo(() => getThanas(district), [district]);
@@ -524,7 +566,21 @@ export default function Home({
   }, [optionGroups]);
 
   useEffect(() => {
-    setCart(loadCart());
+    // Re-price every persisted line against the CURRENT config. The stored
+    // unitPrice is a snapshot: a cart left overnight while the admin changed the
+    // price rendered the old amount, while the server re-derives from config at
+    // checkout — so the courier collected a different number than the buyer saw.
+    setCart(
+      loadCart().map((item) => ({
+        ...item,
+        unitPrice: unitPriceFromConfig(displayConfig, {
+          productId: item.productId,
+          variantId: item.variantId,
+          optionValues: item.optionValues
+        })
+      }))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -692,9 +748,14 @@ export default function Home({
   const totalWeight = cart.length
     ? cart.reduce((sum, item) => sum + item.weightPerUnit * item.quantity, 0)
     : currentItem.weightPerUnit * currentItem.quantity;
-  const selectedAreaCfg = (displayConfig.deliveryAreas || []).find((a) => a.name === deliveryArea);
+  // Mirrors lib/pricing.ts: an area override only applies once the address itself
+  // resolves to Dhaka. Matching on bare name alone gave Kushtia's "Mirpur" thana
+  // the ৳80 Dhaka rate.
+  const selectedAreaCfg =
+    deliveryZone === "insideDhaka"
+      ? (displayConfig.deliveryAreas || []).find((a) => a.name === deliveryArea)
+      : undefined;
   const rawShippingFee = (() => {
-    // A chosen delivery area overrides the inside/outside-Dhaka zone fee.
     if (selectedAreaCfg) return selectedAreaCfg.fee;
     const rules = displayConfig.shippingRules;
     if (rules?.enabled && rules.tiers?.length) {
@@ -710,7 +771,7 @@ export default function Home({
   })();
   const freeDeliveryQty = displayConfig.freeDeliveryThresholdQty ?? 0;
   const shippingFee = freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty ? 0 : rawShippingFee;
-  const discount = effectiveSubtotal >= 10000 || totalQuantity >= 3 ? Math.round(effectiveSubtotal * 0.05) : 0;
+  const discount = orderDiscount(effectiveSubtotal, totalQuantity);
   const total = effectiveSubtotal + giftWrapFee + shippingFee - discount;
   const minOrderValue = selectedAreaCfg?.minOrder ?? displayConfig.minOrderValue ?? 0;
   const belowMinOrder = minOrderValue > 0 && effectiveSubtotal < minOrderValue;
@@ -806,13 +867,28 @@ export default function Home({
     setError(null);
     setSuccess(null);
     setLoading(true);
+    try {
+      await submitCheckout(event);
+    } catch (err) {
+      // Without this, a rejected fetch on a flaky mobile connection left
+      // `loading` true forever: the submit button stayed disabled with no error
+      // and only a page reload recovered.
+      setError(lang === "bn" ? "নেটওয়ার্ক সমস্যা। আবার চেষ্টা করুন।" : "Network problem. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitCheckout = async (event: React.FormEvent<HTMLFormElement>) => {
     if (orderDisabled) {
       setError(lang === "bn" ? "এই পণ্যটি বর্তমানে স্টকে নেই।" : "This product is currently out of stock.");
-      setLoading(false);
       return;
     }
     const formData = new FormData(event.currentTarget);
-    const itemsForCheckout = cart.length ? cart : [currentItem];
+    // The standalone option/quantity controls stop affecting the order once the
+    // cart is non-empty, so fold the current selection in rather than silently
+    // shipping whatever was added first.
+    const itemsForCheckout = cart.length ? upsertCartLine(cart, currentItem) : [currentItem];
     const payload = {
       name: String(formData.get("name") || "").trim(),
       email: String(formData.get("email") || "").trim(),
@@ -840,6 +916,10 @@ export default function Home({
       selectedOptions,
       variantId: selectedVariant?.sku || "",
       items: itemsForCheckout,
+      // Both /api/cod and /api/payment-link implement an idempotent-replay guard
+      // keyed on this, but the client never sent it — so a double-tap on a slow
+      // connection created two orders, two inventory holds and two SMS.
+      idempotencyKey: checkoutKey,
       unitPrice,
       giftWrapFee,
       shippingFee,
@@ -847,7 +927,9 @@ export default function Home({
     };
 
     const phoneOk = /^01[3-9]\d{8}$/.test(payload.phone);
-    const allOptionsSelected = cart.length ? true : optionGroups.every((group) => !!selectedOptions[group.id]);
+    // Always validate: the current selection is folded into the order above, so
+    // skipping this for a non-empty cart let an unselected option through.
+    const allOptionsSelected = optionGroups.every((group) => !!selectedOptions[group.id]);
 
       if (!payload.name || !payload.email || !payload.phone) {
         setError(t.requiredFieldsError);
@@ -928,9 +1010,9 @@ export default function Home({
       } else {
         setSuccess(t.codSuccess);
         setCart([]);
-        fireMarketingEvent("purchase", { currency: "BDT", value: total, email: payload.email, phone: payload.phone });
+        setCheckoutKey(newCheckoutKey());
+        fireMarketingEvent("purchase", { currency: "BDT", value: total });
       }
-      setLoading(false);
       return;
     }
 
@@ -961,7 +1043,8 @@ export default function Home({
       } else {
         setSuccess(t.manualSuccess);
         setCart([]);
-        fireMarketingEvent("purchase", { currency: "BDT", value: total, email: payload.email, phone: payload.phone });
+        setCheckoutKey(newCheckoutKey());
+        fireMarketingEvent("purchase", { currency: "BDT", value: total });
       }
       setLoading(false);
       return;
@@ -981,11 +1064,13 @@ export default function Home({
       }
       const data = (await response.json()) as { url?: string };
       if (data.url) {
+        // The order already exists server-side; leaving the cart populated let a
+        // returning buyer re-order the same items.
+        setCart([]);
         window.location.href = data.url;
       } else {
         setError("Payment link not available.");
       }
-      setLoading(false);
       return;
     }
 
@@ -996,11 +1081,16 @@ export default function Home({
     });
     if (!response.ok) {
       setError("Unable to start checkout.");
-      setLoading(false);
       return;
     }
     const data = (await response.json()) as { url?: string };
-    if (data.url) window.location.href = data.url;
+    if (data.url) {
+      setCart([]);
+      window.location.href = data.url;
+    } else {
+      // Previously fell through silently: no error, and loading stayed true.
+      setError("Unable to start checkout.");
+    }
   };
 
   const handleOtpRequest = async () => {

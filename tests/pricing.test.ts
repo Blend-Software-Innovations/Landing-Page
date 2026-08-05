@@ -115,11 +115,36 @@ describe("computeOrderAmounts", () => {
   it("charges the area fee and no discount below thresholds", async () => {
     const config = testConfig();
     const items = await priceItems(config, null, { quantity: 1 });
-    const amounts = computeOrderAmounts(config, items, { deliveryArea: "Dhanmondi" });
+    const amounts = computeOrderAmounts(config, items, {
+      deliveryArea: "Dhanmondi",
+      district: "Dhaka",
+      thana: "Dhanmondi"
+    });
     expect(amounts.goodsSubtotal).toBe(1000);
     expect(amounts.shippingFee).toBe(60);
     expect(amounts.discount).toBe(0);
     expect(amounts.total).toBe(1060);
+  });
+
+  it("ignores an area override when the address is not in Dhaka", async () => {
+    const config = testConfig();
+    const items = await priceItems(config, null, { quantity: 1 });
+    // Kushtia genuinely has a thana called "Mirpur"; matching the configured
+    // Dhaka area by bare name handed it the ৳80 Dhaka rate.
+    const kushtia = computeOrderAmounts(config, items, {
+      deliveryArea: "Dhanmondi",
+      district: "Kushtia",
+      thana: "Mirpur"
+    });
+    expect(kushtia.shippingFee).toBe(120);
+    // Same guard against a forged area on a non-Dhaka address.
+    const forged = computeOrderAmounts(config, items, {
+      deliveryArea: "Dhanmondi",
+      district: "Rangpur",
+      thana: "Rangpur Sadar",
+      deliveryZone: "insideDhaka"
+    });
+    expect(forged.shippingFee).toBe(120);
   });
 
   it("applies the 5% discount at quantity >= 3 and gift wrap from config", async () => {
