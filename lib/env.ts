@@ -34,6 +34,8 @@ const envSchema = z.object({
   CONFIG_ID: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  TELEGRAM_BOT_TOKEN: blankAsUndefined(z.string().optional()),
+  TELEGRAM_CHAT_ID: blankAsUndefined(z.string().optional()),
   TWILIO_SID: z.string().optional(),
   TWILIO_AUTH: z.string().optional(),
   TWILIO_PHONE: z.string().optional(),

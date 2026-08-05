@@ -1,5 +1,6 @@
 import { logger } from "./logger";
 import { getPrisma } from "./prisma";
+import { notifyTelegramNewOrder } from "./telegram";
 import twilio from "twilio";
 
 const twilioSid = process.env.TWILIO_SID || "";
@@ -14,6 +15,17 @@ export async function notifyOrderStatusChange(order: any, previousStatus: string
 
 export async function notifyNewOrder(order: any) {
   logger.info({ orderId: order.id, customer: order.customerName, total: order.total }, "new order");
+  // Every order path (COD, payment link, manual proof, Stripe webhook) reaches
+  // this through createOrder, so the alert is wired once here rather than in
+  // four endpoints.
+  //
+  // Deliberately NOT awaited: createOrder awaits this function, so awaiting the
+  // send would put a round-trip to Telegram (up to its timeout) between the
+  // buyer pressing Order and getting a response. The alert is for the merchant,
+  // not the customer, so it must not sit in the checkout path. Safe to float
+  // here because the app runs as a persistent Node server, and
+  // notifyTelegramNewOrder swallows its own errors.
+  void notifyTelegramNewOrder(order);
 }
 
 export async function notifyManualPaymentReview(order: any, status: "VERIFIED" | "REJECTED") {
