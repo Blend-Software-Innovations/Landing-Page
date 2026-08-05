@@ -9,6 +9,10 @@
 export type GalleryItem = {
   url: string;
   caption: string;
+  /** Optional colour/variant label (e.g. "White", "সাদা"). Images sharing a
+   *  label are grouped behind one swatch so a buyer can flip between colours;
+   *  untagged images show for every colour. */
+  color?: string;
 };
 
 export type OptionGroup = {

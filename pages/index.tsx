@@ -8,6 +8,7 @@ import Product from "../components/Product";
 import Reviews from "../components/Reviews";
 import Video from "../components/Video";
 import TrustBar from "../components/TrustBar";
+import ProductGallery from "../components/ProductGallery";
 import { useJsFlag, useScrollReveal, useTilt } from "../lib/useMotion";
 import { SiteConfig, Experiment, ExperimentVariant, Review, normalizeSections } from "../lib/siteConfig";
 import { materializeVariants } from "../lib/variants";
@@ -1367,8 +1368,15 @@ export default function Home({
       case "gallery": {
         // Nothing to show until real photos are uploaded — an empty frame or a
         // broken image costs more trust than omitting the section.
-        const heroImage = variantImageUrl || displayConfig.gallery[0]?.url || displayConfig.signatureImage;
-        if (!heroImage) return null;
+        // Build the angle list: configured gallery images first, then the
+        // signature/variant shot as a fallback so a shop with a single photo
+        // still renders something sensible.
+        const galleryItems = (displayConfig.gallery || []).filter((item) => item.url);
+        if (!galleryItems.length) {
+          const fallback = variantImageUrl || displayConfig.signatureImage;
+          if (fallback) galleryItems.push({ url: fallback, caption: "" });
+        }
+        if (!galleryItems.length) return null;
         return (
           <section className="section pb-14">
             <div className="card p-8 md:p-10">
@@ -1388,33 +1396,12 @@ export default function Home({
                     </p>
                   </div>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <button
-                    type="button"
-                    onClick={() => setLightboxSrc(heroImage)}
-                    className="md:row-span-2 md:col-span-2 rounded-3xl overflow-hidden border border-slate-200 bg-slate-100 relative text-left"
-                  >
-                    <Image
-                      src={heroImage}
-                      alt={displayConfig.gallery[0]?.caption || `${displayConfig.brandName} product showcase`}
-                      className="h-full w-full object-cover"
-                      width={1200}
-                      height={900}
-                      sizes="(max-width: 768px) 100vw, 800px"
-                      priority
-                    />
-                  </button>
-                  {displayConfig.gallery.slice(1).map((item) => (
-                    <button
-                      key={item.url}
-                      type="button"
-                      onClick={() => setLightboxSrc(item.url)}
-                      className="rounded-3xl overflow-hidden border border-slate-200 bg-slate-100"
-                    >
-                      <Image src={item.url} alt={item.caption} width={600} height={600} className="h-full w-full object-cover" />
-                    </button>
-                  ))}
-                </div>
+                <ProductGallery
+                  items={galleryItems}
+                  productName={activeProduct?.name || displayConfig.brandName}
+                  lang={lang}
+                  onOpenLightbox={setLightboxSrc}
+                />
               </div>
             </div>
             {lightboxSrc && (
