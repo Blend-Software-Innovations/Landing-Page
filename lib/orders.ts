@@ -77,6 +77,57 @@ function isTransitionAllowed(current: OrderStatus, next: OrderStatus) {
   return STATUS_TRANSITIONS[current]?.includes(next);
 }
 
+export type OrderItemRow = {
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+/** Reduce whatever a caller passed to exactly the columns OrderItem has.
+ *
+ *  Callers pass richer objects — lib/pricing.ts returns PricedItem, which also
+ *  carries `name` and `weightPerUnit` for display and shipping maths — and
+ *  Prisma's nested create REJECTS unknown arguments. Handing those straight
+ *  through threw on every order and turned checkout into a 500. Mapping here
+ *  rather than in each endpoint covers all four order paths at once, and means a
+ *  future caller adding a field cannot break checkout again. */
+export function toOrderItemRows(payload: {
+  items?: Array<Record<string, unknown>>;
+  productId?: string;
+  variantId?: string | null;
+  quantity?: number;
+  unitPrice?: number;
+  total?: number;
+}): OrderItemRow[] {
+  const source = payload.items?.length
+    ? payload.items
+    : [
+        {
+          productId: payload.productId || "",
+          variantId: payload.variantId || null,
+          quantity: payload.quantity,
+          unitPrice: payload.unitPrice,
+          lineTotal: payload.total
+        }
+      ];
+  return source.map((item: any) => {
+    const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+    const unitPrice = Math.max(0, Math.round(Number(item.unitPrice) || 0));
+    const lineTotal = Number.isFinite(Number(item.lineTotal))
+      ? Math.round(Number(item.lineTotal))
+      : unitPrice * quantity;
+    return {
+      productId: String(item.productId || ""),
+      variantId: item.variantId ? String(item.variantId) : null,
+      quantity,
+      unitPrice,
+      lineTotal
+    };
+  });
+}
+
 export async function createOrder(payload: OrderPayload) {
   const prisma = getPrisma() as any;
   const allReservationIds = [
@@ -90,17 +141,14 @@ export async function createOrder(payload: OrderPayload) {
       // Hold might already be committed or missing; ignore.
     }
   }
-  const items = payload.items?.length
-    ? payload.items
-    : [
-        {
-          productId: payload.productId || "",
-          variantId: payload.variantId || null,
-          quantity: payload.quantity,
-          unitPrice: payload.unitPrice,
-          lineTotal: payload.total
-        }
-      ];
+  // Persist ONLY the columns OrderItem actually has. Callers pass richer objects
+  // — lib/pricing.ts returns PricedItem, which also carries `name` and
+  // `weightPerUnit` for display and shipping maths — and Prisma's nested create
+  // rejects unknown arguments, so handing it those straight through threw and
+  // turned every order into a 500. Mapping here rather than in each endpoint
+  // means all four order paths are covered and a future caller adding a field
+  // cannot break checkout again.
+  const items = toOrderItemRows(payload);
   const order = await prisma.order.create({
     data: {
       status: payload.status || "PENDING",
