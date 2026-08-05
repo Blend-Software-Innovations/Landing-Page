@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GetServerSideProps } from "next";
 import Head from "next/head";
 import Image from "next/image";
@@ -27,6 +27,7 @@ import {
   cartQuantity as cartQuantityOf
 } from "../lib/cart";
 import { unitPriceFromConfig, orderDiscount } from "../lib/priceFromConfig";
+import { loadDraft, saveDraft, clearDraft, collectFields } from "../lib/formDraft";
 import { getConfig } from "../lib/siteConfig.server";
 
 type Lang = "en" | "bn";
@@ -36,8 +37,6 @@ type UiCopy = {
   navReviews: string;
   navDemo: string;
   navCheckout: string;
-  heroCtaPrimary: string;
-  heroCtaSecondary: string;
   orderTitleBn: string;
   orderTitleEn: string;
   orderBody: string;
@@ -73,7 +72,6 @@ type UiCopy = {
   paymentManualShort: string;
   manualNote: string;
   txnLabel: string;
-  proofLabel: string;
   paidAmountLabel: string;
   deliveryInside: string;
   selectDistrict: string;
@@ -97,7 +95,6 @@ type UiCopy = {
   trustReturn: string;
   trustReturnNote: string;
   stickyOrder: string;
-  scrollHint: string;
   giftWrapLabel: string;
   consentLabel: string;
   faqHeading: string;
@@ -114,7 +111,6 @@ type UiCopy = {
   codNote: string;
   courierLabel: string;
   courierRequired: string;
-  orderSummary: string;
   summarySubtotal: string;
   summaryGiftWrap: string;
   summaryShipping: string;
@@ -122,7 +118,6 @@ type UiCopy = {
   summaryTotal: string;
   addToCart: string;
   cartTitle: string;
-  cartEmpty: string;
   cartRemove: string;
   cartQty: string;
 };
@@ -133,8 +128,6 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "Reviews",
     navDemo: "Demo",
     navCheckout: "Order",
-    heroCtaPrimary: "Order Now",
-    heroCtaSecondary: "See the product",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "Fill in your details to receive a secure payment link and instant SMS confirmation.",
@@ -170,7 +163,6 @@ const ui: Record<Lang, UiCopy> = {
     paymentManualShort: "bKash / Nagad",
     manualNote: "Send the exact order amount and upload the payment screenshot.",
     txnLabel: "Transaction ID",
-    proofLabel: "Payment screenshot",
     paidAmountLabel: "Paid amount (BDT)",
     deliveryInside: "Inside Dhaka",
     selectDistrict: "Select district",
@@ -194,7 +186,6 @@ const ui: Record<Lang, UiCopy> = {
     trustReturn: "Easy return",
     trustReturnNote: "Wrong or damaged item",
     stickyOrder: "Order now",
-    scrollHint: "Scroll to explore",
     giftWrapLabel: "Gift wrap",
     consentLabel: "Allow analytics & marketing cookies",
     faqHeading: "Frequently asked questions",
@@ -211,7 +202,6 @@ const ui: Record<Lang, UiCopy> = {
     codNote: "We will call to confirm your order.",
     courierLabel: "Select delivery partner",
     courierRequired: "Please select a courier partner for COD.",
-    orderSummary: "Order summary",
     summarySubtotal: "Subtotal",
     summaryGiftWrap: "Gift wrap",
     summaryShipping: "Shipping",
@@ -219,7 +209,6 @@ const ui: Record<Lang, UiCopy> = {
     summaryTotal: "Total",
     addToCart: "Add to cart",
     cartTitle: "Your cart",
-    cartEmpty: "Cart is empty.",
     cartRemove: "Remove",
     cartQty: "Qty"
   },
@@ -228,8 +217,6 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "রিভিউ",
     navDemo: "ডেমো",
     navCheckout: "অর্ডার",
-    heroCtaPrimary: "এখনই অর্ডার করুন",
-    heroCtaSecondary: "পণ্যটি দেখুন",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "আপনার তথ্য দিন, আমরা সিকিউর পেমেন্ট লিংক পাঠাবো এবং পেমেন্টের পর SMS কনফার্মেশন যাবে।",
@@ -265,7 +252,6 @@ const ui: Record<Lang, UiCopy> = {
     paymentManualShort: "বিকাশ / নগদ",
     manualNote: "অর্ডার এমাউন্ট অনুযায়ী পেমেন্ট করে স্ক্রিনশট আপলোড করুন।",
     txnLabel: "ট্রান্স্যাকশন আইডি",
-    proofLabel: "পেমেন্ট স্ক্রিনশট",
     paidAmountLabel: "পরিশোধিত টাকার পরিমাণ (BDT)",
     deliveryInside: "ঢাকার ভিতরে",
     selectDistrict: "জেলা নির্বাচন করুন",
@@ -289,7 +275,6 @@ const ui: Record<Lang, UiCopy> = {
     trustReturn: "সহজ রিটার্ন",
     trustReturnNote: "ভুল বা ড্যামেজ পণ্যে",
     stickyOrder: "অর্ডার করুন",
-    scrollHint: "নিচে স্ক্রল করুন",
     giftWrapLabel: "গিফট র‍্যাপ",
     consentLabel: "অ্যানালিটিক্স ও মার্কেটিং কুকি অনুমোদন করুন",
     faqHeading: "সাধারণ জিজ্ঞাসা",
@@ -306,7 +291,6 @@ const ui: Record<Lang, UiCopy> = {
     codNote: "অর্ডার কনফার্মের জন্য আমরা কল করবো।",
     courierLabel: "ডেলিভারি পার্টনার নির্বাচন করুন",
     courierRequired: "COD এর জন্য ডেলিভারি পার্টনার নির্বাচন করুন।",
-    orderSummary: "অর্ডার সারাংশ",
     summarySubtotal: "সাবটোটাল",
     summaryGiftWrap: "গিফট র‍্যাপ",
     summaryShipping: "ডেলিভারি",
@@ -314,7 +298,6 @@ const ui: Record<Lang, UiCopy> = {
     summaryTotal: "মোট",
     addToCart: "কার্টে যোগ করুন",
     cartTitle: "আপনার কার্ট",
-    cartEmpty: "কার্ট খালি আছে।",
     cartRemove: "রিমুভ",
     cartQty: "পরিমাণ"
   }
@@ -456,6 +439,20 @@ function getStoredUtm() {
   function fireMarketingEvent(name: string, params?: Record<string, unknown>) {
   if (typeof window === "undefined") return;
   if (!hasMarketingConsent()) return;
+  // GTM, gtag and fbq all execute synchronously inside this call, and GTM in
+  // turn runs every matching tag. Called straight from the "add to cart" handler
+  // that meant third-party script execution blocked the paint of the very
+  // feedback the buyer is waiting for. Hand the work back to the browser first.
+  const run = () => dispatchMarketingEvent(name, params);
+  const idle = (window as any).requestIdleCallback;
+  if (typeof idle === "function") {
+    idle(run, { timeout: 1000 });
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
+function dispatchMarketingEvent(name: string, params?: Record<string, unknown>) {
   const payload = { ...(params || {}), utm: getStoredUtm() };
   const eventId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   const dataLayer = (window as any).dataLayer;
@@ -531,6 +528,24 @@ export default function Home({
   // District -> thana cascade. The zone (and therefore the shipping fee) is
   // DERIVED from the district rather than picked by the buyer, so the quote
   // cannot disagree with the address. The server re-derives it identically.
+  // --- Order form draft -----------------------------------------------------
+  // The text inputs are uncontrolled (read via FormData at submit), which keeps
+  // typing cheap but means a refresh loses everything. Restore into the DOM once
+  // on mount, then persist on input, debounced so a keystroke never touches
+  // localStorage synchronously.
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const draftTimer = useRef<number | null>(null);
+  const draftRestored = useRef(false);
+
+  const persistDraft = () => {
+    if (typeof window === "undefined" || !formRef.current) return;
+    if (draftTimer.current) window.clearTimeout(draftTimer.current);
+    const form = formRef.current;
+    draftTimer.current = window.setTimeout(() => {
+      saveDraft({ fields: collectFields(form), district, thana, deliverySlot, courierPartner, quantity });
+    }, 500);
+  };
+
   // One key per attempt: regenerated after a successful order so the next order
   // is not swallowed by the idempotent-replay guard.
   const [checkoutKey, setCheckoutKey] = useState("");
@@ -541,6 +556,28 @@ export default function Home({
   const [district, setDistrict] = useState("");
   const [thana, setThana] = useState("");
   const thanaOptions = useMemo(() => getThanas(district), [district]);
+  // The district list is static and the thana list only changes with the
+  // district, but both were rebuilt on every render — 64 + up to 48 <option>
+  // elements per keystroke while typing a phone number, which is what made the
+  // form feel sluggish before "add to cart" even ran.
+  const districtOptionEls = useMemo(
+    () =>
+      DISTRICTS.map((d) => (
+        <option key={d.en} value={d.en}>
+          {districtLabel(d, lang)}
+        </option>
+      )),
+    [lang]
+  );
+  const thanaOptionEls = useMemo(
+    () =>
+      thanaOptions.map((th) => (
+        <option key={th.en} value={th.en}>
+          {thanaLabel(th, lang)}
+        </option>
+      )),
+    [thanaOptions, lang]
+  );
   const deliveryZone = resolveDeliveryZone(district, thana);
   // The thana doubles as the delivery area so a configured per-area fee still
   // wins over the flat inside/outside rate.
@@ -567,6 +604,32 @@ export default function Home({
   }, [optionGroups]);
 
   useEffect(() => {
+    // Restore the saved draft into the uncontrolled inputs once, after mount.
+    if (draftRestored.current) return;
+    draftRestored.current = true;
+    const draft = loadDraft();
+    if (!draft) return;
+    const form = formRef.current;
+    if (form) {
+      for (const [key, value] of Object.entries(draft.fields)) {
+        const field = form.elements.namedItem(key);
+        if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+          field.value = value;
+        }
+      }
+      // The phone field drives OTP state, so mirror it back rather than leaving
+      // the restored value invisible to the rest of the form.
+      const phoneField = form.elements.namedItem("phone");
+      if (phoneField instanceof HTMLInputElement && phoneField.value) setPhoneInput(phoneField.value);
+    }
+    if (draft.district) setDistrict(draft.district);
+    if (draft.thana) setThana(draft.thana);
+    if (draft.deliverySlot) setDeliverySlot(draft.deliverySlot);
+    if (draft.courierPartner) setCourierPartner(draft.courierPartner);
+    if (draft.quantity) setQuantity(normalizeQuantity(draft.quantity));
+  }, []);
+
+  useEffect(() => {
     // Re-price every persisted line against the CURRENT config. The stored
     // unitPrice is a snapshot: a cart left overnight while the admin changed the
     // price rendered the old amount, while the server re-derives from config at
@@ -585,7 +648,12 @@ export default function Home({
   }, []);
 
   useEffect(() => {
-    saveCart(cart);
+    // JSON.stringify + localStorage.setItem is synchronous and blocks the main
+    // thread. Firing it inline on every cart change put that write between the
+    // click and the paint; deferring lets the UI update first. The cleanup keeps
+    // rapid changes (holding the quantity spinner) to a single write.
+    const handle = window.setTimeout(() => saveCart(cart), 150);
+    return () => window.clearTimeout(handle);
   }, [cart]);
 
   useEffect(() => {
@@ -711,7 +779,14 @@ export default function Home({
     return optionGroups.reduce(
       (acc, group) => {
         const selected = selectedOptions[group.id];
-        const fee = displayConfig.priceModifiers?.[group.id]?.[selected] ?? 0;
+        // Match the shared rule: skip a value that is no longer on the group.
+        // This client copy was missing that guard, so a stale selection kept
+        // adding its fee to the quote while the server dropped it — exactly the
+        // quote/charge divergence the shared module exists to prevent.
+        const fee =
+          selected && group.options.includes(selected)
+            ? displayConfig.priceModifiers?.[group.id]?.[selected] ?? 0
+            : 0;
         acc[group.id] = fee;
         acc.total += fee;
         return acc;
@@ -720,7 +795,8 @@ export default function Home({
     );
   }, [optionGroups, selectedOptions, displayConfig.priceModifiers]);
 
-  const unitPrice = selectedVariant?.price ?? basePrice + optionFees.total;
+  // Round to match the server, which does Math.round on the resolved unit price.
+  const unitPrice = Math.round(selectedVariant?.price ?? basePrice + optionFees.total);
   const currentItemId = `${selectedProductId || "default"}-${selectedVariant?.id || "base"}-${Object.values(selectedOptions).join("|")}`;
   const currentItem: CartItem = {
     id: currentItemId,
@@ -1012,6 +1088,7 @@ export default function Home({
         setSuccess(t.codSuccess);
         setCart([]);
         setCheckoutKey(newCheckoutKey());
+        clearDraft();
         fireMarketingEvent("purchase", { currency: "BDT", value: total });
       }
       return;
@@ -1045,6 +1122,7 @@ export default function Home({
         setSuccess(t.manualSuccess);
         setCart([]);
         setCheckoutKey(newCheckoutKey());
+        clearDraft();
         fireMarketingEvent("purchase", { currency: "BDT", value: total });
       }
       setLoading(false);
@@ -1153,7 +1231,9 @@ export default function Home({
     }));
   }, [displayConfig.reviews, lang]);
 
-  const sections = normalizeSections(displayConfig.sections);
+  // normalizeSections copies, de-dupes and sorts on every call, and returned a
+  // fresh array identity each render.
+  const sections = useMemo(() => normalizeSections(displayConfig.sections), [displayConfig.sections]);
 
   const canonicalBase = (displayConfig.siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
   const schemaProduct =
@@ -1161,7 +1241,10 @@ export default function Home({
     displayConfig.products?.[0] ||
     null;
   const schemaImagePath = displayConfig.signatureImage || displayConfig.seoImage || "";
-  const productJsonLd = {
+  // Serialized into <Head> below. Rebuilding and re-stringifying this on every
+  // render meant two full JSON serializations per keystroke, each forcing
+  // next/head to re-diff — the dominant per-character cost in the order form.
+  const productJsonLd = useMemo(() => ({
     "@context": "https://schema.org",
     "@type": "Product",
     name: schemaProduct?.name || displayConfig.productCardTitle.en,
@@ -1190,19 +1273,25 @@ export default function Home({
           : "https://schema.org/InStock",
       ...(canonicalBase ? { url: canonicalBase } : {})
     }
-  };
-  const faqItems: Array<{ q: string; a: string }> = sections.find((s) => s.type === "faq")?.settings?.items || [];
-  const faqJsonLd = faqItems.length
-    ? {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        mainEntity: faqItems.map((item) => ({
-          "@type": "Question",
-          name: item.q,
-          acceptedAnswer: { "@type": "Answer", text: item.a }
-        }))
-      }
-    : null;
+  }), [displayConfig, canonicalBase, schemaProduct, schemaImagePath]);
+
+  const faqJsonLd = useMemo(() => {
+    const faqItems: Array<{ q: string; a: string }> = sections.find((s) => s.type === "faq")?.settings?.items || [];
+    if (!faqItems.length) return null;
+    return {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems.map((item) => ({
+        "@type": "Question",
+        name: item.q,
+        acceptedAnswer: { "@type": "Answer", text: item.a }
+      }))
+    };
+  }, [sections]);
+
+  // Stringify once per data change rather than once per render.
+  const productJsonLdText = useMemo(() => JSON.stringify(productJsonLd), [productJsonLd]);
+  const faqJsonLdText = useMemo(() => (faqJsonLd ? JSON.stringify(faqJsonLd) : ""), [faqJsonLd]);
 
   const renderSection = (type: string) => {
     switch (type) {
@@ -1494,7 +1583,7 @@ export default function Home({
                   <span>{t.orderTitleEn}</span>
                 </div>
                 <p className="mt-2 text-slate-600">{t.orderBody}</p>
-                <form onSubmit={handleCheckout} className="mt-6 space-y-4">
+                <form ref={formRef} onSubmit={handleCheckout} onInput={persistDraft} className="mt-6 space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <input name="name" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formName} required />
                     <input name="email" type="email" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formEmail} required />
@@ -1505,8 +1594,11 @@ export default function Home({
                         required
                         onChange={(e) => {
                           setPhoneInput(e.target.value);
-                          setOtpToken("");
-                          setOtpStatus(null);
+                          // Only clear when there is something to clear: these
+                          // fired on every keystroke and each one re-rendered
+                          // the whole page.
+                          if (otpToken) setOtpToken("");
+                          if (otpStatus !== null) setOtpStatus(null);
                         }}
                       />
                     <input name="address" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formAddress} required />
@@ -1571,11 +1663,7 @@ export default function Home({
                       className="rounded-xl border border-slate-200 px-4 py-3"
                     >
                       <option value="">{t.selectDistrict}</option>
-                      {DISTRICTS.map((d) => (
-                        <option key={d.en} value={d.en}>
-                          {districtLabel(d, lang)}
-                        </option>
-                      ))}
+                      {districtOptionEls}
                     </select>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -1586,11 +1674,7 @@ export default function Home({
                       className="rounded-xl border border-slate-200 px-4 py-3 disabled:bg-slate-50 disabled:text-slate-400"
                     >
                       <option value="">{district ? t.selectThana : t.selectDistrictFirst}</option>
-                      {thanaOptions.map((th) => (
-                        <option key={th.en} value={th.en}>
-                          {thanaLabel(th, lang)}
-                        </option>
-                      ))}
+                      {thanaOptionEls}
                     </select>
                     <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                       {thana
@@ -1921,9 +2005,9 @@ return (
       footerText={displayConfig.footerText}
     >
       <Head>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: productJsonLdText }} />
         {faqJsonLd ? (
-          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: faqJsonLdText }} />
         ) : null}
       </Head>
       {sections.filter((s) => s.enabled).map((section) => (
