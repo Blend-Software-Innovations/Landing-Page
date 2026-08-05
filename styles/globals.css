@@ -7,19 +7,36 @@
   --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
   --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 
-  /* Neutral ink scale — near-black rather than pure black, Apple-style */
-  --color-ink: #0b0b0f;
-  --color-ink-soft: #3f4451;
-  --color-ink-muted: #6b7280;
+  /* Ink — near-black with a trace of the accent's hue rather than neutral grey,
+     so text and surfaces read as one family instead of black-on-teal. */
+  --color-ink: #08171a;
+  --color-ink-soft: #395055;
+  /* 4.61:1 on the canvas. The lighter grey this replaced measured 3.88 and
+     failed AA for body text — muted must still be readable, and secondary lines
+     here carry delivery and price detail. */
+  --color-ink-muted: #5f7479;
+
+  /* Airy surfaces. The canvas is barely off-white and cooled a few degrees
+     toward the accent; that tint is what stops a white page reading as "unset"
+     while keeping the openness the layout depends on. */
   --color-surface: #ffffff;
-  --color-canvas: #f5f5f7;
-  --color-hairline: #e6e6eb;
-  --color-accent: #0b0b0f;
+  --color-canvas: #f4f8f8;
+  --color-hairline: #e2ecec;
+
+  /* Teal ramp. --color-accent is deliberately deep rather than bright: a
+     saturated cyan reads cheap and fails contrast on white, while this passes
+     AA for body text and still feels like colour, not grey. */
+  --color-accent: #0d6d68;
+  --color-accent-strong: #095450;
+  --color-accent-soft: #e6f2f1;
+  --color-accent-ring: rgba(13, 109, 104, 0.28);
   --color-trust: #0a7d43;
 
-  --shadow-soft: 0 20px 60px -40px rgba(11, 11, 15, 0.45);
-  --shadow-glow: 0 25px 60px -35px rgba(11, 11, 15, 0.55);
-  --shadow-lift: 0 40px 80px -50px rgba(11, 11, 15, 0.55);
+  /* Shadows tinted with the accent instead of neutral black. Black shadows on a
+     tinted canvas look like dirt; a hue-matched shadow reads as depth. */
+  --shadow-soft: 0 18px 45px -32px rgba(8, 40, 42, 0.38);
+  --shadow-glow: 0 22px 50px -28px rgba(13, 109, 104, 0.45);
+  --shadow-lift: 0 38px 75px -45px rgba(8, 40, 42, 0.42);
 
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
@@ -52,20 +69,97 @@ body {
   line-height: 1.75;
 }
 
+/* Two very wide, very low-opacity teal washes. Individually invisible; together
+   they stop the page reading as flat white without ever looking "coloured". */
 .page-shell {
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.9), transparent 55%), var(--color-canvas);
+  background:
+    radial-gradient(120% 55% at 50% -10%, rgba(13, 109, 104, 0.07), transparent 60%),
+    radial-gradient(90% 45% at 100% 15%, rgba(13, 109, 104, 0.05), transparent 55%),
+    var(--color-canvas);
 }
 
+/* Airier measure. A wider column with more side gutter is most of what makes a
+   single-product page feel composed rather than stretched. */
 .section {
-  width: min(1100px, 92vw);
+  width: min(1180px, 90vw);
   margin: 0 auto;
 }
 
+/* Cards carry a hairline AND a soft shadow rather than a heavy border — the
+   border defines the edge, the shadow supplies the depth. */
 .card {
   background: var(--color-surface);
-  border-radius: 24px;
+  border-radius: 28px;
   border: 1px solid var(--color-hairline);
   box-shadow: var(--shadow-soft);
+}
+
+/* Primary action. A vertical gradient plus a hairline inner highlight is what
+   separates a "designed" button from a filled rectangle. */
+.btn-accent {
+  background-image: linear-gradient(180deg, var(--color-accent) 0%, var(--color-accent-strong) 100%);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    var(--shadow-glow);
+  transition:
+    transform 0.18s var(--ease-spring),
+    box-shadow 0.25s var(--ease-spring),
+    filter 0.25s var(--ease-spring);
+}
+
+.btn-accent:hover {
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 26px 55px -26px rgba(13, 109, 104, 0.55);
+}
+
+.btn-accent:active {
+  transform: scale(0.985);
+}
+
+/* Small tinted label — the "eyebrow" above a heading. Carries the accent at low
+   commitment, which is how a palette reads rich rather than loud. */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  border: 1px solid rgba(13, 109, 104, 0.14);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* One visible focus treatment for every control. Keyboard users get a ring that
+   matches the brand instead of the browser default. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+  border-radius: 12px;
+}
+
+/* Form controls inherit the accent on focus so the form feels part of the page
+   rather than a browser default dropped into it. */
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-accent) !important;
+}
+
+/* Headings: tighter tracking at display sizes is the single clearest signal of
+   a considered type scale. */
+h1,
+h2 {
+  letter-spacing: -0.022em;
+}
+
+h3 {
+  letter-spacing: -0.012em;
 }
 
 .text-ink {
