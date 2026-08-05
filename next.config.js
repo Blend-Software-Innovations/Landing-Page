@@ -3,6 +3,21 @@ const { withSentryConfig } = require("@sentry/nextjs");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Snapshot of which NEXT_PUBLIC_* analytics ids existed AT BUILD TIME.
+  //
+  // Next inlines NEXT_PUBLIC_* into the browser bundle during the build. On a
+  // platform where an env var can be scoped to run time only, setting one that
+  // way leaves the server able to read it while the browser bundle has
+  // `undefined` — so the tag never loads, and every runtime check still reports
+  // it as "set". This records the build-time truth so /api/health can tell the
+  // two apart and say plainly that the scope is wrong.
+  env: {
+    ANALYTICS_BUILD_SNAPSHOT: JSON.stringify({
+      gtm: Boolean(process.env.NEXT_PUBLIC_GTM_ID),
+      ga4: Boolean(process.env.NEXT_PUBLIC_GA4_ID),
+      pixel: Boolean(process.env.NEXT_PUBLIC_FB_PIXEL_ID)
+    })
+  },
   poweredByHeader: false,
   images: {
     // Allow next/image to optimize remote images from Cloudinary and DigitalOcean Spaces.
