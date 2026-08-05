@@ -34,6 +34,33 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
   // are the two integrations that fail silently by design — a missing env var
   // simply disables them — so without this the only way to tell a broken config
   // from a broken send is to place a real order and wait.
+  // Analytics: an id set with the wrong scope is the failure mode here. Next
+  // inlines NEXT_PUBLIC_* at BUILD time, so a run-time-only variable leaves the
+  // browser bundle with `undefined` while the server still sees the value — the
+  // tag silently never loads. Comparing the build snapshot against runtime says
+  // exactly that, instead of reporting a misleading "set".
+  let buildSnapshot: Record<string, boolean> = {};
+  try {
+    buildSnapshot = JSON.parse(process.env.ANALYTICS_BUILD_SNAPSHOT || "{}");
+  } catch {
+    buildSnapshot = {};
+  }
+  const analyticsTag = (key: "gtm" | "ga4" | "pixel", runtimeValue: string | undefined) => {
+    const inBuild = Boolean(buildSnapshot[key]);
+    const atRuntime = Boolean(runtimeValue);
+    if (inBuild) return "active";
+    if (atRuntime) return "WRONG SCOPE — set at run time only; must include build time, then redeploy";
+    return "not-configured";
+  };
+
+  const analytics = {
+    gtm: analyticsTag("gtm", process.env.NEXT_PUBLIC_GTM_ID),
+    ga4: analyticsTag("ga4", process.env.NEXT_PUBLIC_GA4_ID),
+    metaPixel: analyticsTag("pixel", process.env.NEXT_PUBLIC_FB_PIXEL_ID),
+    // Server-side Conversions API — read at run time, so scope does not apply.
+    metaCapi: process.env.META_PIXEL_ID && process.env.META_CAPI_TOKEN ? "configured" : "not-configured"
+  };
+
   const telegram = telegramStatus();
   const notifications = {
     telegram: telegram.configured ? "configured" : "not-configured",
@@ -46,5 +73,5 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
 
   return res
     .status(healthy ? 200 : 503)
-    .json({ status: healthy ? "ok" : "degraded", checks, notifications, time: new Date().toISOString() });
+    .json({ status: healthy ? "ok" : "degraded", checks, notifications, analytics, time: new Date().toISOString() });
 }

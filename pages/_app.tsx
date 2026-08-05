@@ -1,5 +1,6 @@
 import type { AppProps } from "next/app";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import Script from "next/script";
 import "../styles/globals.css";
 
@@ -7,6 +8,21 @@ type ConsentState = "granted" | "denied";
 
 export default function App({ Component, pageProps }: AppProps) {
   const [consent, setConsent] = useState<ConsentState>("denied");
+  const router = useRouter();
+
+  // The inline snippets above only fire on a full page load. Client-side
+  // navigation (order -> success, for example) would otherwise go unrecorded.
+  useEffect(() => {
+    const onRouteChange = (url: string) => {
+      const w = window as any;
+      if (typeof w.fbq === "function") w.fbq("track", "PageView");
+      if (typeof w.gtag === "function" && process.env.NEXT_PUBLIC_GA4_ID) {
+        w.gtag("config", process.env.NEXT_PUBLIC_GA4_ID, { page_path: url });
+      }
+    };
+    router.events.on("routeChangeComplete", onRouteChange);
+    return () => router.events.off("routeChangeComplete", onRouteChange);
+  }, [router.events]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -100,6 +116,7 @@ export default function App({ Component, pageProps }: AppProps) {
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
             fbq('init', '${fbPixelId}');
+            fbq('track', 'PageView');
           `}
         </Script>
       )}

@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { applyCors } from "../../lib/cors";
+import { toMetaEventName, stripPii } from "../../lib/analyticsEvents";
 
 function hashValue(value: string) {
   return crypto.createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
@@ -29,6 +30,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { event, payload, eventId } = req.body as { event?: string; payload?: Record<string, any>; eventId?: string };
   if (!event) return res.status(400).json({ error: "Missing event" });
 
+  // Translate to Meta's standard name. Without this the server half arrived as a
+  // CUSTOM event under the GA4 name, so it neither deduplicated against the
+  // browser pixel (Meta matches on event_name + event_id) nor counted as a
+  // standard event for optimisation. Anything unmapped is dropped rather than
+  // sent as a custom event nobody asked for.
+  const metaEvent = toMetaEventName(event);
+  if (!metaEvent) return res.status(200).json({ status: "skipped", reason: "unmapped event" });
+
   const eventTime = Math.floor(Date.now() / 1000);
   const resolvedEventId = eventId || crypto.randomUUID();
 
@@ -42,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const capiPayload = {
     data: [
       {
-        event_name: event,
+        event_name: metaEvent,
         event_time: eventTime,
         event_id: resolvedEventId,
         action_source: "website",
@@ -54,7 +63,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           client_ip_address: getClientIp(req),
           client_user_agent: req.headers["user-agent"]
         },
-        custom_data: payload || {}
+        // Identifiers go to user_data hashed, above. Passing them raw here as
+        // well is redundant and against Meta's policy.
+        custom_data: stripPii(payload || {})
       }
     ],
     // The token goes in the POST body, never the URL — query strings end up in
