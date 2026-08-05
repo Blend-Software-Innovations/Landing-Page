@@ -128,10 +128,6 @@ body {
   transform: translateZ(40px);
 }
 
-.tilt-layer-deep {
-  transform: translateZ(70px);
-}
-
 /* Pressable — the tactile confirmation Apple uses on every control. */
 .pressable {
   transition: transform 0.18s var(--ease-spring), box-shadow 0.18s var(--ease-spring);
@@ -148,39 +144,6 @@ body {
 .lift-on-hover:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-lift);
-}
-
-/* Marquee for the trust strip */
-@keyframes marquee-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-.marquee-track {
-  animation: marquee-scroll 32s linear infinite;
-}
-
-@keyframes order-shake {
-  0%, 100% { transform: translateX(0); }
-  15% { transform: translateX(-4px); }
-  30% { transform: translateX(4px); }
-  45% { transform: translateX(-3px); }
-  60% { transform: translateX(3px); }
-}
-
-.animate-order-shake {
-  animation: order-shake 1.4s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  from { background-position: -200% 0; }
-  to { background-position: 200% 0; }
-}
-
-.shimmer {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 2.4s linear infinite;
 }
 
 /* Respect the OS-level reduced-motion preference: strip animation, keep the
