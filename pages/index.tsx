@@ -12,6 +12,13 @@ import { useJsFlag, useScrollReveal, useTilt } from "../lib/useMotion";
 import { SiteConfig, Experiment, ExperimentVariant, Review, normalizeSections } from "../lib/siteConfig";
 import { materializeVariants } from "../lib/variants";
 import { DISTRICTS, getThanas, resolveDeliveryZone, districtLabel, thanaLabel } from "../lib/bdGeo";
+import {
+  normalizeQuantity,
+  setLineQuantity,
+  upsertCartLine,
+  cartSubtotal as cartSubtotalOf,
+  cartQuantity as cartQuantityOf
+} from "../lib/cart";
 import { getConfig } from "../lib/siteConfig.server";
 
 type Lang = "en" | "bn";
@@ -668,9 +675,19 @@ export default function Home({
     unitPrice,
     weightPerUnit: selectedVariant?.weight || 0
   };
-  const cartSubtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  // The quantity box and the cart row are two views of the same number. Without
+  // this, `effectiveSubtotal` switches to the cart the moment it is non-empty and
+  // the quantity box silently stops doing anything — it still counts up, but no
+  // price moves, which reads as a broken form.
+  const setQuantitySynced = (next: unknown) => {
+    const qty = normalizeQuantity(next);
+    setQuantity(qty);
+    setCart((prev) => setLineQuantity(prev, currentItemId, qty));
+  };
+
+  const cartSubtotal = cartSubtotalOf(cart);
   const effectiveSubtotal = cart.length ? cartSubtotal : unitPrice * quantity;
-  const totalQuantity = cart.length ? cart.reduce((sum, item) => sum + item.quantity, 0) : quantity;
+  const totalQuantity = cart.length ? cartQuantityOf(cart) : quantity;
   const giftWrapFee = giftWrap ? displayConfig.giftWrapFee ?? 120 : 0;
   const totalWeight = cart.length
     ? cart.reduce((sum, item) => sum + item.weightPerUnit * item.quantity, 0)
@@ -757,17 +774,7 @@ export default function Home({
       setError(t.optionsRequiredError);
       return;
     }
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === currentItem.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === currentItem.id
-            ? { ...item, quantity: item.quantity + currentItem.quantity }
-            : item
-        );
-      }
-      return [...prev, { ...currentItem }];
-    });
+    setCart((prev) => upsertCartLine(prev, currentItem));
     setSuccess(lang === "bn" ? "কার্টে যোগ হয়েছে।" : "Added to cart.");
     fireMarketingEvent("add_to_cart", {
       currency: "BDT",
@@ -784,11 +791,10 @@ export default function Home({
   };
 
   const updateCartQty = (id: string, nextQty: number) => {
-    setCart((prev) =>
-      prev
-        .map((item) => (item.id === id ? { ...item, quantity: Math.max(1, nextQty) } : item))
-        .filter((item) => item.quantity > 0)
-    );
+    const qty = normalizeQuantity(nextQty);
+    setCart((prev) => setLineQuantity(prev, id, qty));
+    // Mirror back, so the cart's +/- buttons and the quantity box never disagree.
+    if (id === currentItemId) setQuantity(qty);
   };
 
   const removeFromCart = (id: string) => {
@@ -1476,7 +1482,7 @@ export default function Home({
                       type="number"
                       min={1}
                       value={quantity}
-                      onChange={(e) => setQuantity(Number(e.target.value))}
+                      onChange={(e) => setQuantitySynced(Number(e.target.value))}
                       className="rounded-xl border border-slate-200 px-4 py-3"
                     />
                     <select
