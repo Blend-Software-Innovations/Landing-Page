@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GetServerSideProps } from "next";
 import Head from "next/head";
 import Image from "next/image";
@@ -27,6 +27,7 @@ import {
   cartQuantity as cartQuantityOf
 } from "../lib/cart";
 import { unitPriceFromConfig, orderDiscount } from "../lib/priceFromConfig";
+import { loadDraft, saveDraft, clearDraft, collectFields } from "../lib/formDraft";
 import { getConfig } from "../lib/siteConfig.server";
 
 type Lang = "en" | "bn";
@@ -531,6 +532,24 @@ export default function Home({
   // District -> thana cascade. The zone (and therefore the shipping fee) is
   // DERIVED from the district rather than picked by the buyer, so the quote
   // cannot disagree with the address. The server re-derives it identically.
+  // --- Order form draft -----------------------------------------------------
+  // The text inputs are uncontrolled (read via FormData at submit), which keeps
+  // typing cheap but means a refresh loses everything. Restore into the DOM once
+  // on mount, then persist on input, debounced so a keystroke never touches
+  // localStorage synchronously.
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const draftTimer = useRef<number | null>(null);
+  const draftRestored = useRef(false);
+
+  const persistDraft = () => {
+    if (typeof window === "undefined" || !formRef.current) return;
+    if (draftTimer.current) window.clearTimeout(draftTimer.current);
+    const form = formRef.current;
+    draftTimer.current = window.setTimeout(() => {
+      saveDraft({ fields: collectFields(form), district, thana, deliverySlot, courierPartner, quantity });
+    }, 500);
+  };
+
   // One key per attempt: regenerated after a successful order so the next order
   // is not swallowed by the idempotent-replay guard.
   const [checkoutKey, setCheckoutKey] = useState("");
@@ -541,6 +560,28 @@ export default function Home({
   const [district, setDistrict] = useState("");
   const [thana, setThana] = useState("");
   const thanaOptions = useMemo(() => getThanas(district), [district]);
+  // The district list is static and the thana list only changes with the
+  // district, but both were rebuilt on every render — 64 + up to 48 <option>
+  // elements per keystroke while typing a phone number, which is what made the
+  // form feel sluggish before "add to cart" even ran.
+  const districtOptionEls = useMemo(
+    () =>
+      DISTRICTS.map((d) => (
+        <option key={d.en} value={d.en}>
+          {districtLabel(d, lang)}
+        </option>
+      )),
+    [lang]
+  );
+  const thanaOptionEls = useMemo(
+    () =>
+      thanaOptions.map((th) => (
+        <option key={th.en} value={th.en}>
+          {thanaLabel(th, lang)}
+        </option>
+      )),
+    [thanaOptions, lang]
+  );
   const deliveryZone = resolveDeliveryZone(district, thana);
   // The thana doubles as the delivery area so a configured per-area fee still
   // wins over the flat inside/outside rate.
@@ -565,6 +606,32 @@ export default function Home({
     });
     setSelectedOptions(next);
   }, [optionGroups]);
+
+  useEffect(() => {
+    // Restore the saved draft into the uncontrolled inputs once, after mount.
+    if (draftRestored.current) return;
+    draftRestored.current = true;
+    const draft = loadDraft();
+    if (!draft) return;
+    const form = formRef.current;
+    if (form) {
+      for (const [key, value] of Object.entries(draft.fields)) {
+        const field = form.elements.namedItem(key);
+        if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+          field.value = value;
+        }
+      }
+      // The phone field drives OTP state, so mirror it back rather than leaving
+      // the restored value invisible to the rest of the form.
+      const phoneField = form.elements.namedItem("phone");
+      if (phoneField instanceof HTMLInputElement && phoneField.value) setPhoneInput(phoneField.value);
+    }
+    if (draft.district) setDistrict(draft.district);
+    if (draft.thana) setThana(draft.thana);
+    if (draft.deliverySlot) setDeliverySlot(draft.deliverySlot);
+    if (draft.courierPartner) setCourierPartner(draft.courierPartner);
+    if (draft.quantity) setQuantity(normalizeQuantity(draft.quantity));
+  }, []);
 
   useEffect(() => {
     // Re-price every persisted line against the CURRENT config. The stored
@@ -1012,6 +1079,7 @@ export default function Home({
         setSuccess(t.codSuccess);
         setCart([]);
         setCheckoutKey(newCheckoutKey());
+        clearDraft();
         fireMarketingEvent("purchase", { currency: "BDT", value: total });
       }
       return;
@@ -1045,6 +1113,7 @@ export default function Home({
         setSuccess(t.manualSuccess);
         setCart([]);
         setCheckoutKey(newCheckoutKey());
+        clearDraft();
         fireMarketingEvent("purchase", { currency: "BDT", value: total });
       }
       setLoading(false);
@@ -1494,7 +1563,7 @@ export default function Home({
                   <span>{t.orderTitleEn}</span>
                 </div>
                 <p className="mt-2 text-slate-600">{t.orderBody}</p>
-                <form onSubmit={handleCheckout} className="mt-6 space-y-4">
+                <form ref={formRef} onSubmit={handleCheckout} onInput={persistDraft} className="mt-6 space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <input name="name" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formName} required />
                     <input name="email" type="email" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formEmail} required />
@@ -1505,8 +1574,11 @@ export default function Home({
                         required
                         onChange={(e) => {
                           setPhoneInput(e.target.value);
-                          setOtpToken("");
-                          setOtpStatus(null);
+                          // Only clear when there is something to clear: these
+                          // fired on every keystroke and each one re-rendered
+                          // the whole page.
+                          if (otpToken) setOtpToken("");
+                          if (otpStatus !== null) setOtpStatus(null);
                         }}
                       />
                     <input name="address" className="rounded-xl border border-slate-200 px-4 py-3" placeholder={t.formAddress} required />
@@ -1571,11 +1643,7 @@ export default function Home({
                       className="rounded-xl border border-slate-200 px-4 py-3"
                     >
                       <option value="">{t.selectDistrict}</option>
-                      {DISTRICTS.map((d) => (
-                        <option key={d.en} value={d.en}>
-                          {districtLabel(d, lang)}
-                        </option>
-                      ))}
+                      {districtOptionEls}
                     </select>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -1586,11 +1654,7 @@ export default function Home({
                       className="rounded-xl border border-slate-200 px-4 py-3 disabled:bg-slate-50 disabled:text-slate-400"
                     >
                       <option value="">{district ? t.selectThana : t.selectDistrictFirst}</option>
-                      {thanaOptions.map((th) => (
-                        <option key={th.en} value={th.en}>
-                          {thanaLabel(th, lang)}
-                        </option>
-                      ))}
+                      {thanaOptionEls}
                     </select>
                     <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                       {thana
