@@ -138,7 +138,10 @@ export async function createOrder(payload: OrderPayload) {
       items: {
         create: items
       }
-    }
+    },
+    // Return the lines too — the order alert itemises them, and without this
+    // Prisma returns the order without its relation.
+    include: { items: true }
   });
   await writeOrderAudit({
     orderId: order.id,
