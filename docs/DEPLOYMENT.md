@@ -33,8 +33,12 @@ Genuinely required in production:
 
 Name mismatches to watch for (the live app has historically had the wrong ones):
 
-- SMS/OTP: the code reads `TWILIO_SID`, `TWILIO_AUTH`, `TWILIO_PHONE` — **not**
-  `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER`.
+- SMS/OTP: **resolved, no longer a mismatch.** The code accepts Twilio's own names
+  (`TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER`) and falls back to
+  the legacy `TWILIO_SID` / `TWILIO_AUTH` / `TWILIO_PHONE`. Prefer the official names.
+  Before this, the code read only the short names while the deployed app was configured
+  with the official ones, so the client was never constructed and every OTP and order
+  confirmation SMS silently failed to send.
 - Object storage: the code reads `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`,
   `S3_SECRET_ACCESS_KEY` (plus optional `S3_ENDPOINT`, `S3_PUBLIC_URL`) — **not** `AWS_*` or
   `S3_BUCKET_NAME`. Uploads silently fall back to the container filesystem (wiped on every

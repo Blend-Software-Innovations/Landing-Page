@@ -76,17 +76,26 @@ services:
       # (Cloudinary alternative shown; the existing AWS_*/S3_BUCKET_NAME vars are NOT read by the
       #  code — it expects S3_BUCKET/S3_REGION/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY — so they
       #  can be deleted unless you switch uploads to Spaces with the correct names.)
-      # ---- SMS / OTP: code reads TWILIO_SID / TWILIO_AUTH / TWILIO_PHONE ----
-      #      (the live app currently has TWILIO_ACCOUNT_SID/_AUTH_TOKEN/_PHONE_NUMBER — wrong names) ----
-      - key: TWILIO_SID
+      # ---- SMS / OTP ----
+      # The code accepts Twilio's own names first and falls back to the legacy
+      # short ones, so either spelling works. Prefer these.
+      - key: TWILIO_ACCOUNT_SID
         scope: RUN_TIME
         type: SECRET
         value: CHANGE_ME
-      - key: TWILIO_AUTH
+      - key: TWILIO_AUTH_TOKEN
         scope: RUN_TIME
         type: SECRET
         value: CHANGE_ME
-      - key: TWILIO_PHONE
+      - key: TWILIO_PHONE_NUMBER
+        scope: RUN_TIME
+        value: CHANGE_ME
+      # ---- Telegram order alerts ----
+      - key: TELEGRAM_BOT_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: CHANGE_ME
+      - key: TELEGRAM_CHAT_ID
         scope: RUN_TIME
         value: CHANGE_ME
       # ---- Payments ----

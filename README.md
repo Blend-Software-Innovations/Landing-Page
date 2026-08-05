@@ -74,7 +74,8 @@ all durable state is in Postgres, uploads go to Cloudinary/Spaces.
    missing on the live app:
    - `AUTH_JWT_SECRET`, `AUTH_REFRESH_SECRET` — strong random secrets
    - `AUTH_ADMIN_EMAIL`, `AUTH_ADMIN_PASSWORD` — seeds the first owner on first login
-   - Twilio must be named `TWILIO_SID` / `TWILIO_AUTH` / `TWILIO_PHONE` (not `TWILIO_ACCOUNT_SID`…)
+   - Twilio: use `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` (the legacy
+     `TWILIO_SID` / `TWILIO_AUTH` / `TWILIO_PHONE` are still accepted as a fallback)
    - `NPM_CONFIG_PRODUCTION=false` (build needs devDependencies)
    - Cloudinary vars already work; the `AWS_*` / `S3_BUCKET_NAME` vars are unused by the code.
 3. Push to the repo's `main` → App Platform autodeploys.

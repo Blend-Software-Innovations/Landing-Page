@@ -7,12 +7,8 @@ import { requireDb } from "../../../lib/db";
 import { getPrisma } from "../../../lib/prisma";
 import { updateAbandoned } from "../../../lib/abandoned";
 import { getConfig } from "../../../lib/siteConfig.server";
-import twilio from "twilio";
+import { sendSms, twilioConfigured } from "../../../lib/twilio";
 
-const twilioSid = process.env.TWILIO_SID || "";
-const twilioAuth = process.env.TWILIO_AUTH || "";
-const twilioPhone = process.env.TWILIO_PHONE || "";
-const twilioClient = twilioSid && twilioAuth ? twilio(twilioSid, twilioAuth) : null;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const role = await resolveRole(req);
@@ -42,14 +38,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }`;
 
   if (channel === "sms") {
-    if (!twilioClient || !twilioPhone || !record.phone) {
+    if (!twilioConfigured() || !record.phone) {
       return res.status(400).json({ error: "SMS not configured" });
     }
-    await twilioClient.messages.create({
-      to: record.phone,
-      from: twilioPhone,
-      body: message
-    });
+    const sent = await sendSms(record.phone, message);
+    if (!sent) {
+      return res.status(502).json({ error: "Failed to send SMS" });
+    }
   } else {
     const config = await getConfig();
     if (!record.phone) {

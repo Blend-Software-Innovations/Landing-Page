@@ -36,9 +36,14 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   TELEGRAM_BOT_TOKEN: blankAsUndefined(z.string().optional()),
   TELEGRAM_CHAT_ID: blankAsUndefined(z.string().optional()),
-  TWILIO_SID: z.string().optional(),
-  TWILIO_AUTH: z.string().optional(),
-  TWILIO_PHONE: z.string().optional(),
+  // Twilio's own names, which is what the dashboard and their docs give you.
+  TWILIO_ACCOUNT_SID: blankAsUndefined(z.string().optional()),
+  TWILIO_AUTH_TOKEN: blankAsUndefined(z.string().optional()),
+  TWILIO_PHONE_NUMBER: blankAsUndefined(z.string().optional()),
+  // Legacy short names, still accepted so an existing deployment keeps working.
+  TWILIO_SID: blankAsUndefined(z.string().optional()),
+  TWILIO_AUTH: blankAsUndefined(z.string().optional()),
+  TWILIO_PHONE: blankAsUndefined(z.string().optional()),
   META_PIXEL_ID: z.string().optional(),
   META_CAPI_TOKEN: z.string().optional(),
   META_TEST_EVENT_CODE: z.string().optional(),
