@@ -1314,8 +1314,8 @@ export default function Home({
               <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
                 <div className="space-y-7">
                   {heroBadgeText ? (
-                    <div className="reveal inline-flex items-center gap-2 rounded-full border border-[color:var(--color-hairline)] bg-white px-3.5 py-1.5 text-xs font-medium text-[color:var(--color-ink-soft)]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-trust)]" />
+                    <div className="reveal eyebrow">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-accent)]" />
                       {heroBadgeText}
                     </div>
                   ) : null}
@@ -1338,7 +1338,7 @@ export default function Home({
                   <div className="reveal reveal-delay-3 flex flex-wrap items-center gap-3">
                     <a
                       href="#order"
-                      className="pressable rounded-full bg-[color:var(--color-ink)] px-8 py-4 text-base font-semibold text-white shadow-[var(--shadow-glow)]"
+                      className="btn-accent rounded-full px-8 py-4 text-base font-semibold"
                     >
                       {lang === "bn" ? displayConfig.heroCtaPrimary.bn : displayConfig.heroCtaPrimary.en}
                     </a>
@@ -1406,8 +1406,8 @@ export default function Home({
                           </ul>
                         </div>
                       ) : null}
-                      <div className="rounded-2xl bg-[color:var(--color-ink)] p-6 text-white">
-                        <div className="text-xs uppercase tracking-[0.12em] text-white/60">{t.pricePrefix}</div>
+                      <div className="rounded-2xl bg-[linear-gradient(155deg,var(--color-accent)_0%,var(--color-accent-strong)_100%)] p-6 text-white shadow-[var(--shadow-glow)]">
+                        <div className="text-xs uppercase tracking-[0.12em] text-white/70">{t.pricePrefix}</div>
                         <div className="mt-1.5 text-3xl font-semibold tracking-tight">
                           ৳{unitPrice.toLocaleString("en-BD")}
                         </div>
@@ -1447,7 +1447,7 @@ export default function Home({
             <div className="rounded-2xl border border-slate-200 bg-white p-6 flex flex-wrap items-center justify-between gap-4">
               <div className="text-sm font-semibold text-slate-700">Limited time offer</div>
               <Countdown endDate={endDate} />
-              <a href="#order" className="rounded-full bg-slate-900 px-4 py-2 text-white text-sm font-semibold">
+              <a href="#order" className="btn-accent rounded-full px-4 py-2 text-sm font-semibold">
                 Order now
               </a>
             </div>
@@ -1494,7 +1494,7 @@ export default function Home({
               </div>
             </div>
             {lightboxSrc && (
-              <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6">
+              <div className="fixed inset-0 z-50 bg-[color:var(--color-ink)]/85 backdrop-blur-sm flex items-center justify-center p-6">
                 <button type="button" onClick={() => setLightboxSrc(null)} className="absolute inset-0" aria-label="Close preview" />
                 <div className="relative max-w-4xl w-full">
                   <Image src={lightboxSrc} alt="Preview" width={1200} height={900} className="w-full max-h-[80vh] object-contain rounded-2xl" />
@@ -1520,7 +1520,7 @@ export default function Home({
                         onClick={() => setSelectedProductId(product.id)}
                         className={`rounded-2xl border p-4 text-left transition ${
                           product.id === (selectedProductId || activeProduct?.id)
-                            ? "border-slate-900 bg-slate-900 text-white"
+                            ? "border-[color:var(--color-accent)] bg-[color:var(--color-accent)] text-white"
                             : "border-slate-200 bg-white"
                         }`}
                       >
@@ -1719,7 +1719,7 @@ export default function Home({
                               onClick={() => setSelectedOptions((prev) => ({ ...prev, [group.id]: option }))}
                               className={`rounded-full px-3 py-1 text-xs font-semibold border ${
                                 selectedOptions[group.id] === option
-                                  ? "border-slate-900 bg-slate-900 text-white"
+                                  ? "border-[color:var(--color-accent)] bg-[color:var(--color-accent)] text-white"
                                   : "border-slate-200 bg-white text-slate-600"
                               }`}
                             >
@@ -1857,7 +1857,7 @@ export default function Home({
                   <textarea name="note" rows={3} className="rounded-xl border border-slate-200 px-4 py-3" placeholder="Order note" />
                   {error && <div className="text-sm text-rose-600">{error}</div>}
                   {success && <div className="text-sm text-emerald-600">{success}</div>}
-                  <button type="submit" disabled={loading || orderDisabled} className="rounded-full bg-slate-900 px-6 py-3 text-white font-semibold">
+                  <button type="submit" disabled={loading || orderDisabled} className="btn-accent w-full rounded-full px-6 py-3.5 font-semibold disabled:opacity-60">
                     {loading ? t.formCtaLoading : cod ? t.codCta : paymentMethod === "manual" ? t.manualCta : t.formCta}
                   </button>
                   <p className="text-xs text-slate-500">{t.formConsent}</p>
@@ -1969,7 +1969,7 @@ export default function Home({
               </div>
               <a
                 href="#order"
-                className="pressable shrink-0 rounded-full bg-[color:var(--color-ink)] px-6 py-3 text-sm font-semibold text-white"
+                className="btn-accent shrink-0 rounded-full px-6 py-3 text-sm font-semibold"
               >
                 {t.stickyOrder}
               </a>
@@ -2016,7 +2016,7 @@ return (
 
 
       <section className="section pb-20">
-        <div className="rounded-3xl bg-slate-900 text-white p-10 md:p-14 grid gap-6 md:grid-cols-[1.2fr_0.8fr] items-center shadow-2xl">
+        <div className="rounded-[28px] bg-[linear-gradient(150deg,var(--color-ink)_0%,#0d3a3d_55%,var(--color-accent-strong)_100%)] text-white p-10 md:p-14 grid gap-6 md:grid-cols-[1.2fr_0.8fr] items-center shadow-2xl">
           <div className="space-y-3">
             <h2 className="text-3xl md:text-4xl font-semibold">
               {lang === "bn" ? displayConfig.finalCtaTitle.bn : displayConfig.finalCtaTitle.en}
