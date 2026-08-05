@@ -19,6 +19,23 @@ export function telegramEnabled(): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
 }
 
+// Last failure, kept in memory so it can be surfaced by /api/health. Telegram's
+// error descriptions are safe to expose — they say things like "chat not found"
+// or "bot can't initiate conversation with a user" and never echo the token,
+// which lives in the URL path and is deliberately never logged.
+let lastError: { at: string; status: number | null; description: string } | null = null;
+let lastSuccessAt: string | null = null;
+
+export function telegramStatus() {
+  return {
+    configured: telegramEnabled(),
+    hasToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+    hasChatId: Boolean(process.env.TELEGRAM_CHAT_ID),
+    lastSuccessAt,
+    lastError
+  };
+}
+
 /** Escape the five characters Telegram's HTML parse mode treats as markup.
  *  Customer names and addresses are untrusted free text — an unescaped "<" both
  *  breaks the message and lets a customer inject formatting into your alerts. */
@@ -53,11 +70,26 @@ export async function sendTelegramMessage(text: string): Promise<boolean> {
     if (!response.ok) {
       // Log the status, never the token — the URL contains it.
       const detail = await response.text().catch(() => "");
-      logger.error({ status: response.status, detail: detail.slice(0, 300) }, "Telegram send failed");
+      let description = detail.slice(0, 300);
+      try {
+        const parsed = JSON.parse(detail);
+        if (parsed?.description) description = String(parsed.description);
+      } catch {
+        // keep the raw body
+      }
+      lastError = { at: new Date().toISOString(), status: response.status, description };
+      logger.error({ status: response.status, description }, "Telegram send failed");
       return false;
     }
+    lastSuccessAt = new Date().toISOString();
+    lastError = null;
     return true;
   } catch (error) {
+    lastError = {
+      at: new Date().toISOString(),
+      status: null,
+      description: error instanceof Error ? error.message : String(error)
+    };
     logger.error({ err: error }, "Telegram send error");
     return false;
   } finally {
