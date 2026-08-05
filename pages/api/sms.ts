@@ -1,18 +1,13 @@
 import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
-import twilio from "twilio";
 import { isRateLimited, getClientIp } from "../../lib/rateLimit";
 import { publicRateLimitPerMin } from "../../lib/env";
 import { applyCors } from "../../lib/cors";
+import { sendSms, twilioConfigured } from "../../lib/twilio";
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-04-22.dahlia" }) : null;
-
-const twilioSid = process.env.TWILIO_SID || "";
-const twilioAuth = process.env.TWILIO_AUTH || "";
-const twilioPhone = process.env.TWILIO_PHONE || "";
-const twilioClient = twilioSid && twilioAuth ? twilio(twilioSid, twilioAuth) : null;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!applyCors(req, res)) return;
@@ -26,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(429).json({ error: "Too many requests" });
   }
 
-  if (!twilioClient || !twilioPhone) {
+  if (!twilioConfigured()) {
     return res.status(500).json({ error: "Twilio is not configured" });
   }
 
@@ -63,15 +58,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(429).json({ error: "SMS already sent for this session" });
   }
 
-  try {
-    const result = await twilioClient.messages.create({
-      to: phone,
-      from: twilioPhone,
-      body: message
-    });
-    return res.status(200).json({ status: "sent", sid: result.sid });
-  } catch (error) {
-    logger.error({ err: error }, "Twilio send error");
+  const sent = await sendSms(phone, message);
+  if (!sent) {
     return res.status(500).json({ error: "Failed to send SMS" });
   }
+  return res.status(200).json({ status: "sent" });
 }

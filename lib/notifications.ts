@@ -1,12 +1,7 @@
 import { logger } from "./logger";
 import { getPrisma } from "./prisma";
 import { notifyTelegramNewOrder } from "./telegram";
-import twilio from "twilio";
-
-const twilioSid = process.env.TWILIO_SID || "";
-const twilioAuth = process.env.TWILIO_AUTH || "";
-const twilioPhone = process.env.TWILIO_PHONE || "";
-const twilioClient = twilioSid && twilioAuth ? twilio(twilioSid, twilioAuth) : null;
+import { sendSms } from "./twilio";
 
 export async function notifyOrderStatusChange(order: any, previousStatus: string, nextStatus: string) {
   // Placeholder for SMS/email integrations.
@@ -29,21 +24,13 @@ export async function notifyNewOrder(order: any) {
 }
 
 export async function notifyManualPaymentReview(order: any, status: "VERIFIED" | "REJECTED") {
-  if (!twilioClient || !twilioPhone || !order?.phone) return;
+  if (!order?.phone) return;
   const name = order.customerName || "Customer";
   const message =
     status === "VERIFIED"
       ? `Hi ${name}, your manual payment has been verified. Your order is confirmed.`
       : `Hi ${name}, your manual payment could not be verified. Please contact support.`;
-  try {
-    await twilioClient.messages.create({
-      to: order.phone,
-      from: twilioPhone,
-      body: message
-    });
-  } catch (error) {
-    logger.error({ err: error }, "Manual payment SMS failed");
-  }
+  await sendSms(order.phone, message);
 }
 
 export async function writeOrderAudit(params: {

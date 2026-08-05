@@ -4,7 +4,7 @@ import { applyCors } from "../../../lib/cors";
 import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { publicRateLimitPerMin, otpLength, otpTtlMin, otpResendCooldownSec } from "../../../lib/env";
 import { requestOtp, setOtpCooldown } from "../../../lib/otp";
-import twilio from "twilio";
+import { sendSms } from "../../../lib/twilio";
 import { getConfig } from "../../../lib/siteConfig.server";
 
 function normalizePhone(input: string) {
@@ -57,21 +57,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   await setOtpCooldown(normalized, cooldownSec);
 
-  const twilioSid = process.env.TWILIO_SID || "";
-  const twilioAuth = process.env.TWILIO_AUTH || "";
-  const twilioPhone = process.env.TWILIO_PHONE || "";
-  const client = twilioSid && twilioAuth ? twilio(twilioSid, twilioAuth) : null;
-
-  if (client && twilioPhone) {
-    try {
-      await client.messages.create({
-        to: normalized,
-        from: twilioPhone,
-        body: `Your OTP code is ${code}. It expires in ${otpTtlMin} minutes.`
-      });
-    } catch (error) {
-      logger.error({ err: error }, "OTP SMS failed");
-    }
+  const sent = await sendSms(normalized, `Your OTP code is ${code}. It expires in ${otpTtlMin} minutes.`);
+  if (!sent) {
+    // The code is still valid and the cooldown has been consumed, so surface the
+    // failure rather than leaving the buyer waiting for an SMS that will not
+    // arrive. This is exactly the case the wrong env-var names produced.
+    logger.error({ phone: normalized }, "OTP SMS not sent — Twilio unconfigured or send failed");
   }
 
   return res.status(200).json({

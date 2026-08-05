@@ -1,7 +1,7 @@
 import { logger } from "../../lib/logger";
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
-import twilio from "twilio";
+import { sendSms } from "../../lib/twilio";
 import { commitInventory, resolveInventoryVariantId } from "../../lib/inventory";
 import { createOrder } from "../../lib/orders";
 import { isRateLimited, getClientIp } from "../../lib/rateLimit";
@@ -15,10 +15,6 @@ const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 const stripe = stripeSecret ? new Stripe(stripeSecret, { apiVersion: "2026-04-22.dahlia" }) : null;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
-const twilioSid = process.env.TWILIO_SID || "";
-const twilioAuth = process.env.TWILIO_AUTH || "";
-const twilioPhone = process.env.TWILIO_PHONE || "";
-const twilioClient = twilioSid && twilioAuth ? twilio(twilioSid, twilioAuth) : null;
 
 
 async function readBody(req: NextApiRequest) {
@@ -136,18 +132,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       items: itemsPayload,
       status: "CONFIRMED"
     });
-    if (twilioClient && twilioPhone && meta.phone) {
-      try {
-        await twilioClient.messages.create({
-          to: meta.phone,
-          from: twilioPhone,
-          body: meta.name
-            ? `Hi ${meta.name}, your payment is confirmed. We will process your order soon.`
-            : "Payment confirmed. We will process your order soon."
-        });
-      } catch (error) {
-        logger.error({ err: error }, "Twilio webhook send failed");
-      }
+    if (meta.phone) {
+      await sendSms(
+        meta.phone,
+        meta.name
+          ? `Hi ${meta.name}, your payment is confirmed. We will process your order soon.`
+          : "Payment confirmed. We will process your order soon."
+      );
     }
   }
 
