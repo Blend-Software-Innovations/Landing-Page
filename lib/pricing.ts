@@ -2,6 +2,7 @@ import type { SiteConfig } from "./siteConfig";
 import { getPrisma } from "./prisma";
 import { isDbAvailable } from "./db";
 import { resolveDeliveryZone, isValidLocation } from "./bdGeo";
+import { basePriceFor, optionFeesFor, orderDiscount } from "./priceFromConfig";
 
 // Server-side pricing. Client-submitted unitPrice/total/fees are display-only;
 // every order-creating endpoint must price items from config + DB via this
@@ -53,28 +54,6 @@ async function findDbVariant(idOrSku: string) {
   } catch {
     return null;
   }
-}
-
-function basePriceFor(config: SiteConfig, productId: string): number {
-  if (config.features?.multiProductEnabled) {
-    const product =
-      (productId ? config.products?.find((p) => p.id === productId) : undefined) ||
-      config.products?.find((p) => p.id === config.activeProductId) ||
-      config.products?.[0];
-    if (product && Number.isFinite(product.basePrice)) return product.basePrice;
-  }
-  return Number.isFinite(config.priceBdt) ? config.priceBdt : 0;
-}
-
-function optionFeesFor(config: SiteConfig, optionValues: Record<string, string>): number {
-  let total = 0;
-  for (const group of config.optionGroups || []) {
-    const selected = optionValues[group.id];
-    if (!selected || !group.options.includes(selected)) continue;
-    const fee = config.priceModifiers?.[group.id]?.[selected];
-    if (Number.isFinite(fee)) total += Number(fee);
-  }
-  return total;
 }
 
 export async function priceItem(config: SiteConfig, item: IncomingOrderItem): Promise<PricedItem> {
@@ -166,13 +145,23 @@ export function computeOrderAmounts(
 
   const giftWrapFee = opts.giftWrap ? Number((config as any).giftWrapFee ?? 120) : 0;
 
-  const areaCfg = (config.deliveryAreas || []).find((a) => a.name === opts.deliveryArea);
+  const insideDhaka = resolveZone(opts) === "insideDhaka";
+  // Configured deliveryAreas are Dhaka neighbourhoods (Dhanmondi/Mirpur/Uttara),
+  // matched by bare name. Two things went wrong with an unguarded lookup:
+  //   - Kushtia district also contains a thana called "Mirpur", so a Kushtia
+  //     buyer silently got the ৳80 Dhaka rate instead of the outside-Dhaka one.
+  //   - deliveryArea is raw client input, so posting deliveryArea:"Dhanmondi"
+  //     with a Rangpur address bought the cheap rate and bypassed resolveZone()
+  //     entirely.
+  // Only honour an area override once the address itself resolves to Dhaka.
+  const areaCfg = insideDhaka
+    ? (config.deliveryAreas || []).find((a) => a.name === opts.deliveryArea)
+    : undefined;
   let rawShippingFee: number;
   if (areaCfg) {
     rawShippingFee = areaCfg.fee;
   } else {
     const rules = config.shippingRules;
-    const insideDhaka = resolveZone(opts) === "insideDhaka";
     if (rules?.enabled && rules.tiers?.length) {
       const sorted = [...rules.tiers].sort((a, b) => a.maxWeight - b.maxWeight);
       const tier = sorted.find((t) => totalWeight <= t.maxWeight) || sorted[sorted.length - 1];
@@ -186,7 +175,7 @@ export function computeOrderAmounts(
   const freeDeliveryQty = config.freeDeliveryThresholdQty ?? 0;
   const shippingFee = freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty ? 0 : rawShippingFee;
 
-  const discount = goodsSubtotal >= 10000 || totalQuantity >= 3 ? Math.round(goodsSubtotal * 0.05) : 0;
+  const discount = orderDiscount(goodsSubtotal, totalQuantity);
   const total = goodsSubtotal + giftWrapFee + shippingFee - discount;
 
   return { items, goodsSubtotal, giftWrapFee, shippingFee, discount, total };

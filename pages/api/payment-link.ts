@@ -104,6 +104,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const resolvedId = await resolveInventoryVariantId(item.variantId);
     if (!resolvedId) {
+      // Release anything already held for earlier lines, otherwise a deleted
+      // variant mid-cart pinned real stock for the full hold TTL.
+      for (const id of reservationIds) {
+        await releaseInventory(id);
+      }
       return res.status(409).json({ error: "Insufficient stock" });
     }
     const reservationId = await reserveInventory(resolvedId, item.quantity);

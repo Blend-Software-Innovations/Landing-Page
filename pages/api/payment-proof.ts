@@ -96,6 +96,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       const total = amounts.total;
 
+      // The other three order endpoints all gate on this; manual payment did
+      // not, so a below-minimum order that COD rejected went through here.
+      const deliveryArea = String(payload.deliveryArea || "");
+      const areaCfg = config.deliveryAreas?.find((a) => a.name === deliveryArea);
+      const minOrder = areaCfg?.minOrder ?? config.minOrderValue ?? 0;
+      if (minOrder > 0 && amounts.goodsSubtotal < minOrder) {
+        return res.status(400).json({ error: `Minimum order is ${minOrder} for ${deliveryArea || "this area"}` });
+      }
+
       const reservationIds: string[] = [];
       const resolvedItems = [];
       for (const item of items) {
@@ -105,6 +114,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         const resolvedId = await resolveInventoryVariantId(item.variantId);
         if (!resolvedId) {
+          // Release anything already held for earlier lines, otherwise a deleted
+          // variant mid-cart pinned real stock for the full hold TTL.
+          for (const id of reservationIds) {
+            await releaseInventory(id);
+          }
           return res.status(409).json({ error: "Insufficient stock" });
         }
         const reservationId = await reserveInventory(resolvedId, item.quantity);
@@ -149,8 +163,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         manualReviewNote: manualReviewNote || undefined,
         productId: payload.productId || "",
         variantId: payload.variantId || "",
-        quantity: Number(payload.quantity || 1),
-        unitPrice: Math.round(total / Math.max(1, Number(payload.quantity || 1))),
+        // Was the raw quantity box divided into the GRAND total (incl. shipping
+        // and gift wrap, minus discount), so a 3-line cart submitted with the box
+        // at 1 recorded quantity 1 at a unitPrice of the whole order.
+        quantity: items[0]?.quantity ?? 1,
+        unitPrice: items[0]?.unitPrice ?? 0,
         reservationIds,
         items: resolvedItems,
         status: "PENDING",
