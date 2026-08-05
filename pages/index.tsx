@@ -37,8 +37,6 @@ type UiCopy = {
   navReviews: string;
   navDemo: string;
   navCheckout: string;
-  heroCtaPrimary: string;
-  heroCtaSecondary: string;
   orderTitleBn: string;
   orderTitleEn: string;
   orderBody: string;
@@ -74,7 +72,6 @@ type UiCopy = {
   paymentManualShort: string;
   manualNote: string;
   txnLabel: string;
-  proofLabel: string;
   paidAmountLabel: string;
   deliveryInside: string;
   selectDistrict: string;
@@ -98,7 +95,6 @@ type UiCopy = {
   trustReturn: string;
   trustReturnNote: string;
   stickyOrder: string;
-  scrollHint: string;
   giftWrapLabel: string;
   consentLabel: string;
   faqHeading: string;
@@ -115,7 +111,6 @@ type UiCopy = {
   codNote: string;
   courierLabel: string;
   courierRequired: string;
-  orderSummary: string;
   summarySubtotal: string;
   summaryGiftWrap: string;
   summaryShipping: string;
@@ -123,7 +118,6 @@ type UiCopy = {
   summaryTotal: string;
   addToCart: string;
   cartTitle: string;
-  cartEmpty: string;
   cartRemove: string;
   cartQty: string;
 };
@@ -134,8 +128,6 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "Reviews",
     navDemo: "Demo",
     navCheckout: "Order",
-    heroCtaPrimary: "Order Now",
-    heroCtaSecondary: "See the product",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "Fill in your details to receive a secure payment link and instant SMS confirmation.",
@@ -171,7 +163,6 @@ const ui: Record<Lang, UiCopy> = {
     paymentManualShort: "bKash / Nagad",
     manualNote: "Send the exact order amount and upload the payment screenshot.",
     txnLabel: "Transaction ID",
-    proofLabel: "Payment screenshot",
     paidAmountLabel: "Paid amount (BDT)",
     deliveryInside: "Inside Dhaka",
     selectDistrict: "Select district",
@@ -195,7 +186,6 @@ const ui: Record<Lang, UiCopy> = {
     trustReturn: "Easy return",
     trustReturnNote: "Wrong or damaged item",
     stickyOrder: "Order now",
-    scrollHint: "Scroll to explore",
     giftWrapLabel: "Gift wrap",
     consentLabel: "Allow analytics & marketing cookies",
     faqHeading: "Frequently asked questions",
@@ -212,7 +202,6 @@ const ui: Record<Lang, UiCopy> = {
     codNote: "We will call to confirm your order.",
     courierLabel: "Select delivery partner",
     courierRequired: "Please select a courier partner for COD.",
-    orderSummary: "Order summary",
     summarySubtotal: "Subtotal",
     summaryGiftWrap: "Gift wrap",
     summaryShipping: "Shipping",
@@ -220,7 +209,6 @@ const ui: Record<Lang, UiCopy> = {
     summaryTotal: "Total",
     addToCart: "Add to cart",
     cartTitle: "Your cart",
-    cartEmpty: "Cart is empty.",
     cartRemove: "Remove",
     cartQty: "Qty"
   },
@@ -229,8 +217,6 @@ const ui: Record<Lang, UiCopy> = {
     navReviews: "রিভিউ",
     navDemo: "ডেমো",
     navCheckout: "অর্ডার",
-    heroCtaPrimary: "এখনই অর্ডার করুন",
-    heroCtaSecondary: "পণ্যটি দেখুন",
     orderTitleBn: "অর্ডার ফর্ম",
     orderTitleEn: "Order Form",
     orderBody: "আপনার তথ্য দিন, আমরা সিকিউর পেমেন্ট লিংক পাঠাবো এবং পেমেন্টের পর SMS কনফার্মেশন যাবে।",
@@ -266,7 +252,6 @@ const ui: Record<Lang, UiCopy> = {
     paymentManualShort: "বিকাশ / নগদ",
     manualNote: "অর্ডার এমাউন্ট অনুযায়ী পেমেন্ট করে স্ক্রিনশট আপলোড করুন।",
     txnLabel: "ট্রান্স্যাকশন আইডি",
-    proofLabel: "পেমেন্ট স্ক্রিনশট",
     paidAmountLabel: "পরিশোধিত টাকার পরিমাণ (BDT)",
     deliveryInside: "ঢাকার ভিতরে",
     selectDistrict: "জেলা নির্বাচন করুন",
@@ -290,7 +275,6 @@ const ui: Record<Lang, UiCopy> = {
     trustReturn: "সহজ রিটার্ন",
     trustReturnNote: "ভুল বা ড্যামেজ পণ্যে",
     stickyOrder: "অর্ডার করুন",
-    scrollHint: "নিচে স্ক্রল করুন",
     giftWrapLabel: "গিফট র‍্যাপ",
     consentLabel: "অ্যানালিটিক্স ও মার্কেটিং কুকি অনুমোদন করুন",
     faqHeading: "সাধারণ জিজ্ঞাসা",
@@ -307,7 +291,6 @@ const ui: Record<Lang, UiCopy> = {
     codNote: "অর্ডার কনফার্মের জন্য আমরা কল করবো।",
     courierLabel: "ডেলিভারি পার্টনার নির্বাচন করুন",
     courierRequired: "COD এর জন্য ডেলিভারি পার্টনার নির্বাচন করুন।",
-    orderSummary: "অর্ডার সারাংশ",
     summarySubtotal: "সাবটোটাল",
     summaryGiftWrap: "গিফট র‍্যাপ",
     summaryShipping: "ডেলিভারি",
@@ -315,7 +298,6 @@ const ui: Record<Lang, UiCopy> = {
     summaryTotal: "মোট",
     addToCart: "কার্টে যোগ করুন",
     cartTitle: "আপনার কার্ট",
-    cartEmpty: "কার্ট খালি আছে।",
     cartRemove: "রিমুভ",
     cartQty: "পরিমাণ"
   }
@@ -457,6 +439,20 @@ function getStoredUtm() {
   function fireMarketingEvent(name: string, params?: Record<string, unknown>) {
   if (typeof window === "undefined") return;
   if (!hasMarketingConsent()) return;
+  // GTM, gtag and fbq all execute synchronously inside this call, and GTM in
+  // turn runs every matching tag. Called straight from the "add to cart" handler
+  // that meant third-party script execution blocked the paint of the very
+  // feedback the buyer is waiting for. Hand the work back to the browser first.
+  const run = () => dispatchMarketingEvent(name, params);
+  const idle = (window as any).requestIdleCallback;
+  if (typeof idle === "function") {
+    idle(run, { timeout: 1000 });
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
+function dispatchMarketingEvent(name: string, params?: Record<string, unknown>) {
   const payload = { ...(params || {}), utm: getStoredUtm() };
   const eventId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   const dataLayer = (window as any).dataLayer;
@@ -652,7 +648,12 @@ export default function Home({
   }, []);
 
   useEffect(() => {
-    saveCart(cart);
+    // JSON.stringify + localStorage.setItem is synchronous and blocks the main
+    // thread. Firing it inline on every cart change put that write between the
+    // click and the paint; deferring lets the UI update first. The cleanup keeps
+    // rapid changes (holding the quantity spinner) to a single write.
+    const handle = window.setTimeout(() => saveCart(cart), 150);
+    return () => window.clearTimeout(handle);
   }, [cart]);
 
   useEffect(() => {
@@ -778,7 +779,14 @@ export default function Home({
     return optionGroups.reduce(
       (acc, group) => {
         const selected = selectedOptions[group.id];
-        const fee = displayConfig.priceModifiers?.[group.id]?.[selected] ?? 0;
+        // Match the shared rule: skip a value that is no longer on the group.
+        // This client copy was missing that guard, so a stale selection kept
+        // adding its fee to the quote while the server dropped it — exactly the
+        // quote/charge divergence the shared module exists to prevent.
+        const fee =
+          selected && group.options.includes(selected)
+            ? displayConfig.priceModifiers?.[group.id]?.[selected] ?? 0
+            : 0;
         acc[group.id] = fee;
         acc.total += fee;
         return acc;
@@ -787,7 +795,8 @@ export default function Home({
     );
   }, [optionGroups, selectedOptions, displayConfig.priceModifiers]);
 
-  const unitPrice = selectedVariant?.price ?? basePrice + optionFees.total;
+  // Round to match the server, which does Math.round on the resolved unit price.
+  const unitPrice = Math.round(selectedVariant?.price ?? basePrice + optionFees.total);
   const currentItemId = `${selectedProductId || "default"}-${selectedVariant?.id || "base"}-${Object.values(selectedOptions).join("|")}`;
   const currentItem: CartItem = {
     id: currentItemId,
@@ -1222,7 +1231,9 @@ export default function Home({
     }));
   }, [displayConfig.reviews, lang]);
 
-  const sections = normalizeSections(displayConfig.sections);
+  // normalizeSections copies, de-dupes and sorts on every call, and returned a
+  // fresh array identity each render.
+  const sections = useMemo(() => normalizeSections(displayConfig.sections), [displayConfig.sections]);
 
   const canonicalBase = (displayConfig.siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
   const schemaProduct =
@@ -1230,7 +1241,10 @@ export default function Home({
     displayConfig.products?.[0] ||
     null;
   const schemaImagePath = displayConfig.signatureImage || displayConfig.seoImage || "";
-  const productJsonLd = {
+  // Serialized into <Head> below. Rebuilding and re-stringifying this on every
+  // render meant two full JSON serializations per keystroke, each forcing
+  // next/head to re-diff — the dominant per-character cost in the order form.
+  const productJsonLd = useMemo(() => ({
     "@context": "https://schema.org",
     "@type": "Product",
     name: schemaProduct?.name || displayConfig.productCardTitle.en,
@@ -1259,19 +1273,25 @@ export default function Home({
           : "https://schema.org/InStock",
       ...(canonicalBase ? { url: canonicalBase } : {})
     }
-  };
-  const faqItems: Array<{ q: string; a: string }> = sections.find((s) => s.type === "faq")?.settings?.items || [];
-  const faqJsonLd = faqItems.length
-    ? {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        mainEntity: faqItems.map((item) => ({
-          "@type": "Question",
-          name: item.q,
-          acceptedAnswer: { "@type": "Answer", text: item.a }
-        }))
-      }
-    : null;
+  }), [displayConfig, canonicalBase, schemaProduct, schemaImagePath]);
+
+  const faqJsonLd = useMemo(() => {
+    const faqItems: Array<{ q: string; a: string }> = sections.find((s) => s.type === "faq")?.settings?.items || [];
+    if (!faqItems.length) return null;
+    return {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems.map((item) => ({
+        "@type": "Question",
+        name: item.q,
+        acceptedAnswer: { "@type": "Answer", text: item.a }
+      }))
+    };
+  }, [sections]);
+
+  // Stringify once per data change rather than once per render.
+  const productJsonLdText = useMemo(() => JSON.stringify(productJsonLd), [productJsonLd]);
+  const faqJsonLdText = useMemo(() => (faqJsonLd ? JSON.stringify(faqJsonLd) : ""), [faqJsonLd]);
 
   const renderSection = (type: string) => {
     switch (type) {
@@ -1985,9 +2005,9 @@ return (
       footerText={displayConfig.footerText}
     >
       <Head>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: productJsonLdText }} />
         {faqJsonLd ? (
-          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: faqJsonLdText }} />
         ) : null}
       </Head>
       {sections.filter((s) => s.enabled).map((section) => (
