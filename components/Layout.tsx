@@ -1,4 +1,4 @@
-﻿import Head from "next/head";
+import Head from "next/head";
 import { ReactNode } from "react";
 
 export default function Layout({
@@ -84,7 +84,7 @@ export default function Layout({
       </Head>
       <div className="min-h-screen page-shell">
         {promoEnabled && promoText && (
-          <div className="w-full bg-slate-900 text-white text-xs sm:text-sm">
+          <div className="w-full bg-[color:var(--color-ink)] text-white text-xs sm:text-sm">
             <div className="section py-2 flex items-center justify-center">
               <span className="font-semibold tracking-wide">{promoText}</span>
             </div>
@@ -102,22 +102,22 @@ export default function Layout({
                       className="h-12 w-12 rounded-2xl object-cover border border-slate-200 bg-white"
                     />
                   ) : (
-                    <div className="h-12 w-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-semibold text-lg shadow-soft">
+                    <div className="h-12 w-12 rounded-2xl bg-[linear-gradient(150deg,var(--color-accent)_0%,var(--color-accent-strong)_100%)] text-white flex items-center justify-center font-semibold text-lg shadow-soft">
                       {brand.slice(0, 1).toUpperCase()}
                     </div>
                   )}
                   <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white border border-slate-200 shadow" />
                 </div>
                 <div>
-                  <div className="text-lg font-semibold text-slate-900">{brand}</div>
+                  <div className="text-lg font-semibold text-[color:var(--color-ink)]">{brand}</div>
                   <div className="text-sm text-slate-600">{navLabels.subtitle}</div>
                 </div>
               </div>
               <nav className="flex flex-wrap items-center gap-5 text-sm font-semibold text-slate-700">
-                <a href="#product" className="transition hover:text-slate-900">{navLabels.product}</a>
-                <a href="#reviews" className="transition hover:text-slate-900">{navLabels.reviews}</a>
-                <a href="#video" className="transition hover:text-slate-900">{navLabels.demo}</a>
-                <a href="#order" className="transition hover:text-slate-900">{navLabels.checkout}</a>
+                <a href="#product" className="inline-flex min-h-11 items-center transition hover:text-[color:var(--color-accent)]">{navLabels.product}</a>
+                <a href="#reviews" className="inline-flex min-h-11 items-center transition hover:text-[color:var(--color-accent)]">{navLabels.reviews}</a>
+                <a href="#video" className="inline-flex min-h-11 items-center transition hover:text-[color:var(--color-accent)]">{navLabels.demo}</a>
+                <a href="#order" className="inline-flex min-h-11 items-center transition hover:text-[color:var(--color-accent)]">{navLabels.checkout}</a>
               </nav>
               {lang && onLangChange && (
                 <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
@@ -126,8 +126,8 @@ export default function Layout({
                     onClick={() => onLangChange("en")}
                     className={`rounded-full px-3 py-1 transition ${
                       lang === "en"
-                        ? "bg-slate-900 text-white"
-                        : "border border-slate-300 text-slate-600 hover:text-slate-900"
+                        ? "bg-[color:var(--color-accent)] text-white"
+                        : "border border-[color:var(--color-hairline)] text-[color:var(--color-ink-soft)] hover:text-[color:var(--color-accent)]"
                     }`}
                   >
                     EN
@@ -137,8 +137,8 @@ export default function Layout({
                     onClick={() => onLangChange("bn")}
                     className={`rounded-full px-3 py-1 transition ${
                       lang === "bn"
-                        ? "bg-slate-900 text-white"
-                        : "border border-slate-300 text-slate-600 hover:text-slate-900"
+                        ? "bg-[color:var(--color-accent)] text-white"
+                        : "border border-[color:var(--color-hairline)] text-[color:var(--color-ink-soft)] hover:text-[color:var(--color-accent)]"
                     }`}
                   >
                     বাংলা
@@ -160,7 +160,7 @@ export default function Layout({
             WhatsApp
           </a>
         )}
-        <footer className="mt-10 border-t border-slate-900 bg-slate-900 py-8 text-sm text-white">
+        <footer className="mt-10 border-t border-[color:var(--color-ink)] bg-[color:var(--color-ink)] py-8 text-sm text-white">
           <div className="section">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
               <span className="font-semibold text-white/90">
@@ -170,27 +170,27 @@ export default function Layout({
                 <span>{footer}</span>
                 <div className="flex items-center gap-3 text-white/70">
                   {whatsappLink && (
-                    <a href={whatsappLink} target="_blank" rel="noreferrer" className="hover:text-white">
+                    <a href={whatsappLink} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-white">
                       WhatsApp
                     </a>
                   )}
                   {socials?.facebook && (
-                    <a href={socials.facebook} target="_blank" rel="noreferrer" className="hover:text-white">
+                    <a href={socials.facebook} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-white">
                       Facebook
                     </a>
                   )}
                   {socials?.instagram && (
-                    <a href={socials.instagram} target="_blank" rel="noreferrer" className="hover:text-white">
+                    <a href={socials.instagram} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-white">
                       Instagram
                     </a>
                   )}
                   {socials?.tiktok && (
-                    <a href={socials.tiktok} target="_blank" rel="noreferrer" className="hover:text-white">
+                    <a href={socials.tiktok} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-white">
                       TikTok
                     </a>
                   )}
                   {socials?.youtube && (
-                    <a href={socials.youtube} target="_blank" rel="noreferrer" className="hover:text-white">
+                    <a href={socials.youtube} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-white">
                       YouTube
                     </a>
                   )}
