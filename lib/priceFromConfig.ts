@@ -1,4 +1,4 @@
-import type { SiteConfig } from "./siteConfig";
+import type { SiteConfig, BundleTier } from "./siteConfig";
 
 // Pure, config-only pricing shared by the storefront and the order APIs.
 //
@@ -56,4 +56,38 @@ export function unitPriceFromConfig(
 export function orderDiscount(goodsSubtotal: number, totalQuantity: number): number {
   const qualifies = goodsSubtotal >= DISCOUNT_MIN_SUBTOTAL || totalQuantity >= DISCOUNT_MIN_QUANTITY;
   return qualifies ? Math.round(goodsSubtotal * DISCOUNT_RATE) : 0;
+}
+
+/** Highest bundle tier the quantity reaches, or null below the first tier.
+ *  Tiers are sorted here rather than trusting config order, so an admin adding
+ *  one out of sequence cannot hand a buyer the wrong discount. */
+export function resolveBundleTier(config: SiteConfig, totalQuantity: number): BundleTier | null {
+  const tiers = (config.bundles || [])
+    .filter((t) => Number.isFinite(t.quantity) && t.quantity > 0 && Number.isFinite(t.discountPercent))
+    .sort((a, b) => a.quantity - b.quantity);
+  let match: BundleTier | null = null;
+  for (const tier of tiers) {
+    if (totalQuantity >= tier.quantity) match = tier;
+  }
+  return match;
+}
+
+/** The discount actually applied to an order.
+ *
+ *  A configured bundle tier wins over the legacy blanket rule — otherwise the
+ *  two would stack and a 3-unit order would take 15% AND 5%. Both client and
+ *  server call this, so the quoted saving and the charged saving cannot differ:
+ *  the tier is derived from the quantity, never accepted from the request. */
+export function resolveOrderDiscount(config: SiteConfig, goodsSubtotal: number, totalQuantity: number): number {
+  const tier = resolveBundleTier(config, totalQuantity);
+  if (tier) {
+    const pct = Math.min(90, Math.max(0, tier.discountPercent));
+    return Math.round((goodsSubtotal * pct) / 100);
+  }
+  return orderDiscount(goodsSubtotal, totalQuantity);
+}
+
+/** Whether the reached tier waives delivery. */
+export function bundleFreeDelivery(config: SiteConfig, totalQuantity: number): boolean {
+  return Boolean(resolveBundleTier(config, totalQuantity)?.freeDelivery);
 }

@@ -147,8 +147,10 @@ describe("computeOrderAmounts", () => {
     expect(forged.shippingFee).toBe(120);
   });
 
-  it("applies the 5% discount at quantity >= 3 and gift wrap from config", async () => {
-    const config = testConfig({ giftWrapFee: 120 } as Partial<SiteConfig>);
+  it("applies the legacy 5% discount at quantity >= 3 when no bundle tiers exist", async () => {
+    // bundles: [] is deliberate — with tiers configured the tier wins, which is
+    // covered in tests/bundles.test.ts. This pins the fallback path.
+    const config = testConfig({ giftWrapFee: 120, bundles: [] } as Partial<SiteConfig>);
     const items = await priceItems(config, [{ quantity: 3 }], { quantity: 1 });
     const amounts = computeOrderAmounts(config, items, {
       deliveryZone: "insideDhaka",
