@@ -9,6 +9,7 @@ import Reviews from "../components/Reviews";
 import Video from "../components/Video";
 import TrustBar from "../components/TrustBar";
 import ProductGallery from "../components/ProductGallery";
+import BundlePicker from "../components/BundlePicker";
 import { useJsFlag, useScrollReveal, useTilt } from "../lib/useMotion";
 import { SiteConfig, Experiment, ExperimentVariant, Review, normalizeSections } from "../lib/siteConfig";
 import { materializeVariants } from "../lib/variants";
@@ -26,7 +27,7 @@ import {
   cartSubtotal as cartSubtotalOf,
   cartQuantity as cartQuantityOf
 } from "../lib/cart";
-import { unitPriceFromConfig, orderDiscount } from "../lib/priceFromConfig";
+import { unitPriceFromConfig, resolveOrderDiscount, bundleFreeDelivery } from "../lib/priceFromConfig";
 import { loadDraft, saveDraft, clearDraft, collectFields } from "../lib/formDraft";
 import { getConfig } from "../lib/siteConfig.server";
 
@@ -847,8 +848,13 @@ export default function Home({
       : displayConfig.shippingFees?.outsideDhaka ?? 0;
   })();
   const freeDeliveryQty = displayConfig.freeDeliveryThresholdQty ?? 0;
-  const shippingFee = freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty ? 0 : rawShippingFee;
-  const discount = orderDiscount(effectiveSubtotal, totalQuantity);
+  // Same two helpers the server uses, so the quoted saving and the charged
+  // saving come from one implementation rather than two that can drift.
+  const shippingFee =
+    (freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty) || bundleFreeDelivery(displayConfig, totalQuantity)
+      ? 0
+      : rawShippingFee;
+  const discount = resolveOrderDiscount(displayConfig, effectiveSubtotal, totalQuantity);
   const total = effectiveSubtotal + giftWrapFee + shippingFee - discount;
   const minOrderValue = selectedAreaCfg?.minOrder ?? displayConfig.minOrderValue ?? 0;
   const belowMinOrder = minOrderValue > 0 && effectiveSubtotal < minOrderValue;
@@ -1733,10 +1739,21 @@ export default function Home({
                       </div>
                     ))}
                   </div>
+                  {/* Bundle tiers sit directly above "add to cart": the moment a
+                      buyer has settled on the product is when a second unit is
+                      easiest to sell. */}
+                  <BundlePicker
+                    tiers={displayConfig.bundles || []}
+                    unitPrice={unitPrice}
+                    quantity={quantity}
+                    onSelect={setQuantitySynced}
+                    lang={lang}
+                    freeDeliveryLabel={lang === "bn" ? "+ ফ্রি ডেলিভারি 🚚" : "+ Free delivery 🚚"}
+                  />
                   <button
                     type="button"
                     onClick={addToCart}
-                    className="rounded-full border border-slate-900 bg-white px-5 py-2 text-sm font-semibold text-slate-900"
+                    className="min-h-11 rounded-full border-2 border-[color:var(--color-accent)] bg-white px-5 py-2.5 text-sm font-semibold text-[color:var(--color-accent)] transition hover:bg-[color:var(--color-accent-soft)]"
                   >
                     {t.addToCart}
                   </button>

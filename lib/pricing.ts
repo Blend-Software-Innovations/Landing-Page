@@ -2,7 +2,7 @@ import type { SiteConfig } from "./siteConfig";
 import { getPrisma } from "./prisma";
 import { isDbAvailable } from "./db";
 import { resolveDeliveryZone, isValidLocation } from "./bdGeo";
-import { basePriceFor, optionFeesFor, orderDiscount } from "./priceFromConfig";
+import { basePriceFor, optionFeesFor, resolveOrderDiscount, bundleFreeDelivery } from "./priceFromConfig";
 
 // Server-side pricing. Client-submitted unitPrice/total/fees are display-only;
 // every order-creating endpoint must price items from config + DB via this
@@ -173,9 +173,13 @@ export function computeOrderAmounts(
     }
   }
   const freeDeliveryQty = config.freeDeliveryThresholdQty ?? 0;
-  const shippingFee = freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty ? 0 : rawShippingFee;
+  const qualifiesFreeDelivery =
+    (freeDeliveryQty > 0 && totalQuantity >= freeDeliveryQty) || bundleFreeDelivery(config, totalQuantity);
+  const shippingFee = qualifiesFreeDelivery ? 0 : rawShippingFee;
 
-  const discount = orderDiscount(goodsSubtotal, totalQuantity);
+  // Derived from the quantity the server priced, never from the request — a
+  // client cannot claim a tier it has not bought into.
+  const discount = resolveOrderDiscount(config, goodsSubtotal, totalQuantity);
   const total = goodsSubtotal + giftWrapFee + shippingFee - discount;
 
   return { items, goodsSubtotal, giftWrapFee, shippingFee, discount, total };

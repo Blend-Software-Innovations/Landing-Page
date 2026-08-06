@@ -6,6 +6,20 @@
   en: string;
 };
 
+/** A quantity-tier offer ("Buy 2, save 10%"). Tiers raise average order value by
+ *  making the next unit cheaper, which is why they belong on a single-product
+ *  page far more than a cross-sell would. */
+export type BundleTier = {
+  /** Units required to reach this tier. */
+  quantity: number;
+  /** Percentage off the goods subtotal at this tier. */
+  discountPercent: number;
+  /** Optional flag shown on the tier, e.g. "Most Popular". */
+  badge?: string;
+  /** Waives the delivery charge at this tier. */
+  freeDelivery?: boolean;
+};
+
 export type GalleryItem = {
   url: string;
   caption: string;
@@ -112,6 +126,7 @@ export type SiteConfig = {
     }>;
   };
   freeDeliveryThresholdQty: number;
+  bundles: BundleTier[];
   deliveryAreas: Array<{ name: string; fee: number; minOrder?: number }>;
   minOrderValue: number;
   deliverySlots: string[];
@@ -292,6 +307,13 @@ export const defaultConfig: SiteConfig = {
     ]
   },
   freeDeliveryThresholdQty: 2,
+  // Two tiers by default. Keep the steps modest — a discount deep enough to look
+  // like a fire sale undercuts the premium positioning the rest of the page is
+  // doing, and the point is a bigger basket, not a cheaper one.
+  bundles: [
+    { quantity: 2, discountPercent: 10, badge: "জনপ্রিয়" },
+    { quantity: 3, discountPercent: 15, badge: "সেরা ডিল", freeDelivery: true }
+  ],
   deliveryAreas: [
     { name: "Dhanmondi", fee: 60, minOrder: 300 },
     { name: "Mirpur", fee: 80, minOrder: 300 },
