@@ -587,3 +587,53 @@ h3 {
 .bundle-row:has(.bundle-free) {
   padding-bottom: 2.1rem;
 }
+
+/* ---------------------------------------------------------------------------
+   Stock indicator. Reads as availability at healthy levels and only warms to
+   amber when stock is genuinely low, so the visual pressure tracks reality.
+--------------------------------------------------------------------------- */
+.stockbar {
+  margin-top: 1rem;
+}
+
+.stockbar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-ink-soft);
+  margin-bottom: 0.45rem;
+}
+
+.stockbar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-trust);
+  box-shadow: 0 0 0 3px rgba(10, 125, 67, 0.15);
+}
+
+.stockbar-dot.is-low {
+  background: #b45309;
+  box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.15);
+}
+
+.stockbar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-hairline);
+  overflow: hidden;
+}
+
+.stockbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-trust), #17a05a);
+  transition: width 0.6s var(--ease-out-soft);
+}
+
+.stockbar-fill.is-low {
+  background: linear-gradient(90deg, #b45309, #d97706);
+}

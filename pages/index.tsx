@@ -10,6 +10,7 @@ import Video from "../components/Video";
 import TrustBar from "../components/TrustBar";
 import ProductGallery from "../components/ProductGallery";
 import BundlePicker from "../components/BundlePicker";
+import StockBar from "../components/StockBar";
 import { useJsFlag, useScrollReveal, useTilt } from "../lib/useMotion";
 import { SiteConfig, Experiment, ExperimentVariant, Review, normalizeSections } from "../lib/siteConfig";
 import { materializeVariants } from "../lib/variants";
@@ -858,6 +859,18 @@ export default function Home({
   const total = effectiveSubtotal + giftWrapFee + shippingFee - discount;
   const minOrderValue = selectedAreaCfg?.minOrder ?? displayConfig.minOrderValue ?? 0;
   const belowMinOrder = minOrderValue > 0 && effectiveSubtotal < minOrderValue;
+
+  // Remaining units for the current selection. `activeProduct` is null whenever
+  // the multi-product picker is switched off, so relying on it alone hid the
+  // stock indicator on exactly the single-product stores it is aimed at — the
+  // flag governs the picker, not whether stock exists.
+  const resolvedStock = useMemo(() => {
+    if (selectedVariant) return selectedVariant.stockQty;
+    if (activeProduct) return activeProduct.stock;
+    const products = displayConfig.products || [];
+    const fallback = products.find((p) => p.id === displayConfig.activeProductId) || products[0];
+    return fallback?.stock;
+  }, [selectedVariant, activeProduct, displayConfig.products, displayConfig.activeProductId]);
 
   const variantOutOfStock = selectedVariant ? selectedVariant.stockQty <= 0 : false;
   const orderDisabled =
@@ -1739,6 +1752,12 @@ export default function Home({
                       </div>
                     ))}
                   </div>
+                  {/* Real remaining stock — the variant's count when variants are
+                      in use, otherwise the product's. Never a decorative number. */}
+                  {displayConfig.stockUrgency?.enabled ? (
+                    <StockBar stock={resolvedStock} baseline={displayConfig.stockUrgency?.baseline ?? 50} lang={lang} />
+                  ) : null}
+
                   {/* Bundle tiers sit directly above "add to cart": the moment a
                       buyer has settled on the product is when a second unit is
                       easiest to sell. */}

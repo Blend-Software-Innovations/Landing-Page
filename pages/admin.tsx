@@ -810,6 +810,120 @@ export default function AdminDashboard() {
               Add area
             </button>
           </div>
+          {/* Bundle & Save tiers. The discount is applied server-side from the
+              quantity actually ordered, so what is set here is what gets
+              charged — there is no separate place to keep in sync. */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="text-sm font-semibold text-slate-700">Bundle &amp; Save tiers</div>
+            <div className="text-xs text-slate-500">
+              Buy-more-save-more steps shown above the order button. Quantity is the number of units needed to reach
+              the tier; the discount comes off the product subtotal. Leave empty to fall back to the flat 5% rule.
+            </div>
+            <div className="space-y-3">
+              {(config.bundles || []).map((tier, index) => (
+                <div key={index} className="grid gap-3 md:grid-cols-5">
+                  <InputField
+                    label="Buy quantity"
+                    value={String(tier.quantity)}
+                    onChange={(v) => {
+                      const next = [...(config.bundles || [])];
+                      next[index] = { ...tier, quantity: Math.max(1, Number(v || 1)) };
+                      updateConfig({ ...config, bundles: next });
+                    }}
+                  />
+                  <InputField
+                    label="Discount %"
+                    value={String(tier.discountPercent)}
+                    onChange={(v) => {
+                      const next = [...(config.bundles || [])];
+                      // Clamped here as well as server-side so a slip cannot be
+                      // saved into the live config in the first place.
+                      next[index] = { ...tier, discountPercent: Math.min(90, Math.max(0, Number(v || 0))) };
+                      updateConfig({ ...config, bundles: next });
+                    }}
+                  />
+                  <InputField
+                    label="Badge (optional)"
+                    value={tier.badge || ""}
+                    onChange={(v) => {
+                      const next = [...(config.bundles || [])];
+                      next[index] = { ...tier, badge: v };
+                      updateConfig({ ...config, bundles: next });
+                    }}
+                  />
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(tier.freeDelivery)}
+                      onChange={(e) => {
+                        const next = [...(config.bundles || [])];
+                        next[index] = { ...tier, freeDelivery: e.target.checked };
+                        updateConfig({ ...config, bundles: next });
+                      }}
+                    />
+                    Free delivery
+                  </label>
+                  <button
+                    type="button"
+                    className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600"
+                    onClick={() => {
+                      const next = (config.bundles || []).filter((_, idx) => idx !== index);
+                      updateConfig({ ...config, bundles: next });
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+              onClick={() =>
+                updateConfig({
+                  ...config,
+                  bundles: [...(config.bundles || []), { quantity: 2, discountPercent: 10, badge: "" }]
+                })
+              }
+            >
+              Add tier
+            </button>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="text-sm font-semibold text-slate-700">Stock indicator</div>
+            <div className="text-xs text-slate-500">
+              Shows the product&apos;s real remaining stock above the order button. The count is always the true figure
+              — only the bar&apos;s fill is relative to the baseline below, and it turns amber under 20% of it.
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={Boolean(config.stockUrgency?.enabled)}
+                  onChange={(e) =>
+                    updateConfig({
+                      ...config,
+                      stockUrgency: { baseline: config.stockUrgency?.baseline ?? 50, enabled: e.target.checked }
+                    })
+                  }
+                />
+                Show stock indicator
+              </label>
+              <InputField
+                label="Bar baseline (stock level treated as full)"
+                value={String(config.stockUrgency?.baseline ?? 50)}
+                onChange={(v) =>
+                  updateConfig({
+                    ...config,
+                    stockUrgency: {
+                      enabled: Boolean(config.stockUrgency?.enabled),
+                      baseline: Math.max(1, Number(v || 1))
+                    }
+                  })
+                }
+              />
+            </div>
+          </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="text-sm font-semibold text-slate-700">Delivery time slots</div>
             <div className="flex flex-wrap gap-2">
