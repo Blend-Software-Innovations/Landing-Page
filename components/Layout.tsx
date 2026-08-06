@@ -124,7 +124,7 @@ export default function Layout({
                   <button
                     type="button"
                     onClick={() => onLangChange("en")}
-                    className={`rounded-full px-3 py-1 transition ${
+                    className={`inline-flex min-h-10 items-center rounded-full px-3.5 py-1.5 transition ${
                       lang === "en"
                         ? "bg-[color:var(--color-accent)] text-white"
                         : "border border-[color:var(--color-hairline)] text-[color:var(--color-ink-soft)] hover:text-[color:var(--color-accent)]"
@@ -135,7 +135,7 @@ export default function Layout({
                   <button
                     type="button"
                     onClick={() => onLangChange("bn")}
-                    className={`rounded-full px-3 py-1 transition ${
+                    className={`inline-flex min-h-10 items-center rounded-full px-3.5 py-1.5 transition ${
                       lang === "bn"
                         ? "bg-[color:var(--color-accent)] text-white"
                         : "border border-[color:var(--color-hairline)] text-[color:var(--color-ink-soft)] hover:text-[color:var(--color-accent)]"
