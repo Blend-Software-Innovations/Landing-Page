@@ -127,6 +127,11 @@ export type SiteConfig = {
   };
   freeDeliveryThresholdQty: number;
   bundles: BundleTier[];
+  /** Stock indicator above the order button. `baseline` is the stock level the
+   *  bar treats as full, so the fill communicates how depleted things are. The
+   *  COUNT shown is always the real figure from the product — an invented number
+   *  is the fastest way to lose a repeat buyer who checks twice. */
+  stockUrgency: { enabled: boolean; baseline: number };
   deliveryAreas: Array<{ name: string; fee: number; minOrder?: number }>;
   minOrderValue: number;
   deliverySlots: string[];
@@ -314,6 +319,7 @@ export const defaultConfig: SiteConfig = {
     { quantity: 2, discountPercent: 10, badge: "জনপ্রিয়" },
     { quantity: 3, discountPercent: 15, badge: "সেরা ডিল", freeDelivery: true }
   ],
+  stockUrgency: { enabled: true, baseline: 50 },
   deliveryAreas: [
     { name: "Dhanmondi", fee: 60, minOrder: 300 },
     { name: "Mirpur", fee: 80, minOrder: 300 },
