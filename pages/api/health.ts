@@ -3,6 +3,7 @@ import { logger } from "../../lib/logger";
 import { getPool, isDbAvailable } from "../../lib/db";
 import { telegramStatus } from "../../lib/telegram";
 import { twilioConfigured } from "../../lib/twilio";
+import { configuredCouriers } from "../../lib/couriers";
 
 export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
   const checks: Record<string, string> = {};
@@ -61,6 +62,12 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     metaCapi: process.env.META_PIXEL_ID && process.env.META_CAPI_TOKEN ? "configured" : "not-configured"
   };
 
+  // Which couriers can actually book right now. Every provider needs a
+  // different set of credentials — Pathao alone needs six — so "I set the API
+  // key" and "bookings work" are not the same thing, and the difference used to
+  // only surface when a real order failed at the counter.
+  const couriers = configuredCouriers();
+
   const telegram = telegramStatus();
   const notifications = {
     telegram: telegram.configured ? "configured" : "not-configured",
@@ -68,7 +75,8 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     telegramChatId: telegram.hasChatId ? "set" : "missing",
     telegramLastSuccessAt: telegram.lastSuccessAt,
     telegramLastError: telegram.lastError,
-    sms: twilioConfigured() ? "configured" : "not-configured"
+    sms: twilioConfigured() ? "configured" : "not-configured",
+    couriers: couriers.length ? couriers : "none-configured"
   };
 
   return res

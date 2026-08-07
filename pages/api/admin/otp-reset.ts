@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { hasPermission, resolveRole } from "../../../lib/adminAuth";
+import { hasPermission, resolveActor } from "../../../lib/adminAuth";
 import { adminRateLimitPerMin } from "../../../lib/env";
 import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
 import { requireDb } from "../../../lib/db";
@@ -7,8 +7,12 @@ import { clearOtpCooldown, clearOtpLock } from "../../../lib/otp";
 import { requireCsrf } from "../../../lib/csrf";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const role = await resolveRole(req);
-  if (!hasPermission(role, "analytics:read")) return res.status(401).json({ error: "Unauthorized" });
+  const { role, actor } = await resolveActor(req);
+  // Clearing an OTP lockout is a WRITE, and it disarms brute-force protection on
+  // an arbitrary customer number. It was gated on analytics:read, which staff
+  // hold — so any staff account could loop it to enable unlimited OTP guessing
+  // and SMS pumping against any phone. orders:write excludes staff.
+  if (!hasPermission(role, "orders:write")) return res.status(403).json({ error: "Forbidden" });
   const ip = getClientIp(req);
   if (await isRateLimited(`admin-otp-reset:${ip}`, adminRateLimitPerMin, 60_000)) {
     return res.status(429).json({ error: "Too many requests" });
