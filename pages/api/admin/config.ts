@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getConfig, saveConfig } from "../../../lib/siteConfig.server";
+import { getConfig, saveConfig, deepMerge } from "../../../lib/siteConfig.server";
 import { defaultConfig, type SiteConfig } from "../../../lib/siteConfig";
 import { hasPermission, resolveActor } from "../../../lib/adminAuth";
 import { isRateLimited, getClientIp } from "../../../lib/rateLimit";
@@ -50,8 +50,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: `Invalid ${field}: expected an object.` });
       }
     }
+    // Merge onto the CURRENT config rather than replacing it.
+    //
+    // saveConfig writes the whole blob, and the check above only strips unknown
+    // keys — it never required known ones to be present. So a partial body
+    // ({"priceBdt":1}) replaced the entire row, and getConfig then merged that
+    // over defaultConfig: brand name, products, delivery areas, variants and
+    // bundles all silently reverted to defaults, with a 200 OK. The panel
+    // autosaves on a timer, so one truncated request on a flaky connection was
+    // enough to reset the store.
+    //
+    // Merging makes a partial write only able to change what it names. Arrays
+    // are still replaced wholesale by deepMerge, so removing a gallery image or
+    // a bundle tier keeps working — the panel always sends the full array.
+    const current = await getConfig();
+    const merged = deepMerge(current, body as Partial<SiteConfig>);
+
     const autosave = String(req.query.autosave || "") === "1";
-    await saveConfig(body as unknown as SiteConfig, {
+    await saveConfig(merged, {
       actor: session.actor,
       role,
       ip,
