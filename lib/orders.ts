@@ -3,6 +3,7 @@ import path from "path";
 import { getPrisma } from "./prisma";
 import { extendHoldForOrder, releaseInventory } from "./inventory";
 import { notifyNewOrder, notifyOrderStatusChange, writeOrderAudit } from "./notifications";
+import { logger } from "./logger";
 
 export type OrderPayload = {
   customerName: string;
@@ -236,9 +237,51 @@ export async function updateOrderStatus(
   // diverge on a partial failure.
   const updated = await prisma.$transaction(async (tx: any) => {
     if (nextStatus === "CONFIRMED" && reservationIds.length) {
-      // Commit: drop the holds. Reserved stock was already decremented at reserve time and
-      // now counts as sold, so nothing else changes.
-      await tx.inventoryHold.deleteMany({ where: { id: { in: reservationIds } } });
+      // Commit the reservation.
+      //
+      // Holds expire after 72h and releaseExpiredHolds — which runs on every new
+      // checkout — restores their stock and deletes them. So by the time a slow
+      // manual-payment order is confirmed, its holds may be gone and the stock
+      // already back on the shelf. The old code just deleteMany'd and moved on,
+      // which meant the sale was confirmed with NO stock deducted; cancelling it
+      // later then took the `else` branch below and incremented stock that was
+      // never decremented, inventing units out of nothing.
+      //
+      // Re-deduct whatever the surviving holds no longer cover, so that
+      // "past CONFIRMED" reliably means "stock is committed" — which is the
+      // assumption the cancel/return path depends on.
+      const holds = await tx.inventoryHold.findMany({ where: { id: { in: reservationIds } } });
+
+      const heldByVariant = new Map<string, number>();
+      for (const hold of holds) {
+        heldByVariant.set(hold.variantId, (heldByVariant.get(hold.variantId) || 0) + hold.quantity);
+      }
+      const neededByVariant = new Map<string, number>();
+      for (const item of order.items || []) {
+        if (!item.variantId) continue;
+        neededByVariant.set(item.variantId, (neededByVariant.get(item.variantId) || 0) + item.quantity);
+      }
+
+      for (const [variantId, needed] of neededByVariant) {
+        const shortfall = needed - (heldByVariant.get(variantId) || 0);
+        if (shortfall <= 0) continue;
+        await tx.variant.update({
+          where: { id: variantId },
+          data: { stockQty: { decrement: shortfall } }
+        });
+        // Stock can legitimately go negative here: the units were sold while the
+        // hold had lapsed and someone else may have bought them. Negative is the
+        // honest signal that this needs a human, rather than silently pretending
+        // the stock exists.
+        logger.warn(
+          { orderId, variantId, shortfall },
+          "Confirming an order whose hold had expired — re-deducted stock"
+        );
+      }
+
+      if (holds.length) {
+        await tx.inventoryHold.deleteMany({ where: { id: { in: holds.map((h: any) => h.id) } } });
+      }
     }
 
     if (nextStatus === "CANCELED" || nextStatus === "RETURNED") {
@@ -313,6 +356,10 @@ export async function updateOrderTracking(
   if (trackingCode !== undefined) data.trackingCode = trackingCode;
   if (shippingPartner !== undefined) data.shippingPartner = shippingPartner || null;
   if (!Object.keys(data).length) return null;
+  // Return null on a missing order rather than letting Prisma's P2025 escape as
+  // an unhandled 500; the caller already treats null as "not found".
+  const existing = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true } });
+  if (!existing) return null;
   const order = await prisma.order.update({
     where: { id: orderId },
     data
