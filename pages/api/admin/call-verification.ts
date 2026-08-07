@@ -29,6 +29,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!orderId || !allowed.has(status)) return res.status(400).json({ error: "Invalid request" });
 
   const prisma = getPrisma() as any;
+  // Prisma throws P2025 on a missing row, which surfaced as an unhandled 500
+  // (with a stack trace in dev) instead of a 404.
+  const existing = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true } });
+  if (!existing) return res.status(404).json({ error: "Order not found" });
+
   const order = await prisma.order.update({
     where: { id: orderId },
     data: {

@@ -28,5 +28,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "Missing data" });
   }
   const order = await updateOrderTracking(orderId, trackingCode, shippingPartner, session);
+  // null means the order does not exist — returning 200 {order:null} told the
+  // panel the edit had succeeded.
+  if (!order) return res.status(404).json({ error: "Order not found" });
   return res.status(200).json({ order });
 }
