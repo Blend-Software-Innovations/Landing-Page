@@ -10,7 +10,7 @@ import { getPrisma } from "./prisma";
 const dataPath = path.join(process.cwd(), "data", "site.json");
 const configId = process.env.CONFIG_ID || "default";
 
-function deepMerge<T>(base: T, override: Partial<T>): T {
+export function deepMerge<T>(base: T, override: Partial<T>): T {
   if (typeof base !== "object" || base === null) return base;
   const result: any = Array.isArray(base) ? [...(base as any)] : { ...(base as any) };
   Object.entries(override || {}).forEach(([key, value]) => {
@@ -122,7 +122,18 @@ export async function saveConfig(
                 productId: product.id,
                 name: optionName,
                 price: variant.price,
-                stockQty: variant.stockQty,
+                // stockQty is deliberately NOT updated here.
+                //
+                // The live count belongs to the database: reserveInventory
+                // decrements it at checkout, releaseInventory restores it. The
+                // config blob holds whatever value was typed when the variant
+                // was created and is never written back, so syncing it on every
+                // save reset stock to a stale figure — editing the hero title
+                // restored units that were already sold, and the store oversold
+                // by exactly the quantity committed since the variant was added.
+                //
+                // Stock is set once on create, then owned by the inventory and
+                // batch endpoints.
                 weight: variant.weight || null,
                 imageUrl: variant.images?.[0] || null
               },
